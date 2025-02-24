@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Void</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Exo:ital,wght@0,100..900;1,100..900&family=Major+Mono+Display&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Major+Mono+Display&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" href="/static/images/logo.png" type="image/x-icon">
+</head>
+
+<body>
+    <div class="container">
+        <nav>
+            <div class="brand">
+                <a href="/"><img src="/static/images/logo.png" height="60px" alt="Void Logo" class="logo"></a>
+                <p><a href="/">Void</a></p>
+            </div>
+            <div class="nav-user">
+                {{ if .UserID }}
+                <button id="navToggle" class="nav-toggle">
+                    <img src="/static/images/user.png" alt="User Icon" class="user-icon">
+                    {{ if .NotificationCount }}
+                    <span class="badge">{{ .NotificationCount }}</span>
+                    {{ end }}
+                </button>
+                <div id="navDropdown" class="nav-dropdown">
+                    <a href="/">Your Feed</a>
+                    <a href="/echo-chamber">Echo Chamber</a>
+                    <a href="/notifications">Notifications</a>
+                    <a href="/profile/edit">Edit Profile</a>
+
+                    <a href="/logout">Logout</a>
+                </div>
+                {{ else }}
+                <a class="unauth" href="/login">Login</a>
+                <a class="unauth" href="/register">Register</a>
+                <a class="unauth" href="/echo-chamber">Echo Chamber</a>
+
+                {{ end }}
+            </div>
+        </nav>
+
+
+        {{embed}}
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var toggle = document.getElementById('navToggle');
+            var dropdown = document.getElementById('navDropdown');
+
+            if (toggle && dropdown) {
+
+                // Toggle dropdown on button click.
+                toggle.addEventListener('click', function (e) {
+                    e.stopPropagation(); // Prevent the click from bubbling up.
+                    dropdown.classList.toggle('active');
+                });
+
+                // Hide the dropdown when clicking outside of it.
+                document.addEventListener('click', function (e) {
+                    if (!dropdown.contains(e.target) && !toggle.contains(e.target)) {
+                        dropdown.classList.remove('active');
+                    }
+
+                });
+            }
+        });
+    </script>
+
+    </script>
+</body>
+
+</html>

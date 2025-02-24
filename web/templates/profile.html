@@ -1,0 +1,26 @@
+<!-- profile.html -->
+<div class="profile-card">
+    {{ if .User.Avatar }}
+    <img
+            src="{{ .User.Avatar }}"
+            alt="{{ .User.Username }}'s Avatar"
+            class="profile-card-avatar"
+    />
+    {{ end }}
+    <div class="profile-card-info">
+        <h1>{{ .User.Username }}</h1>
+        <p class="profile-card-bio">{{ if .User.Bio }}-{{ .User.Bio }}{{ else }}{{ end }}</p>
+    </div>
+
+</div>
+
+
+<h2>Recent Shouts</h2>
+<ul>
+    {{ range .Shouts }}
+    <li>
+        <p>{{ .Content }}</p>
+        <small>{{ .CreatedAt | formatDate }}</small>
+    </li>
+    {{ end }}
+</ul>

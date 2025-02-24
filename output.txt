@@ -1,0 +1,3211 @@
+The following text is a Git repository with code. The structure of the text are sections that begin with ----, followed by a single line containing the file path and file name, followed by a variable amount of lines containing the file contents. The text representing the Git repository ends when the symbols --END-- are encountered. Any further text beyond --END-- are meant to be interpreted as instructions using the aforementioned Git repository as context.
+----
+.air.toml
+# .air.toml
+
+# Root directory of your project.
+root = "."
+
+# Directory to put the temporary build output.
+tmp_dir = "tmp"
+
+[build]
+# The command to build your Go application.
+cmd = "go build -o ./tmp/main ./cmd/server"
+# The resulting binary that air will run.
+bin = "./tmp/main"
+# File extensions to watch for changes.
+include_ext = ["go", "html", "tmpl", "tpl", "css", "js"]
+# Directories to exclude from watching.
+exclude_dir = ["vendor", "tmp"]
+# Files to exclude from watching.
+exclude_file = ["air.conf", "air.toml"]
+
+[log]
+timestamp = true
+----
+cmd/server/main.go
+package main
+
+import (
+	"encoding/json"
+	"log"
+	"os"
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/template/html/v2"
+
+	"Void/internal/db"
+	"Void/internal/handlers"
+	"Void/internal/models"
+	"Void/internal/services/notifications"
+	"Void/pkg/rabbitmq"
+	"Void/pkg/session"
+)
+
+// In main.go
+func main() {
+	db.InitDB()
+
+	session.InitStore()
+
+	// Initialize the RabbitMQ connection.
+	if err := rabbitmq.Init("amqp://guest:guest@localhost:5672/"); err != nil {
+		log.Fatalf("Failed to initialize RabbitMQ: %v", err)
+	}
+	log.Println("RabbitMQ connected successfully.")
+
+	// Add this before engine initialization
+	templates, err := os.ReadDir("./web/templates")
+	if err != nil {
+		log.Fatalf("Failed to read templates directory: %v", err)
+	}
+	for _, template := range templates {
+		log.Printf("Found template: %s", template.Name())
+	}
+
+	engine := html.New("./web/templates", ".html")
+	engine.AddFunc("formatDate", func(t time.Time) string {
+		return t.Format("Jan 2, 2006 at 3:04pm")
+	})
+	engine.Debug(true)
+
+	app := fiber.New(fiber.Config{
+		Views: engine,
+	})
+
+	go func() {
+		msgs, err := rabbitmq.ConsumeNotifications()
+		if err != nil {
+			log.Fatalf("Failed to start consumer: %v", err)
+		}
+		for d := range msgs {
+			log.Printf("Received notification message: %s", d.Body)
+
+			var event models.ShoutCreatedEvent
+			if err := json.Unmarshal(d.Body, &event); err != nil {
+				log.Printf("Error unmarshalling event: %v", err)
+				d.Nack(false, true) // Bad message, requeue it
+				continue
+			}
+
+			// Process the event (no error check needed)
+			notifications.SendNewShoutNotifications(event)
+
+			// Successfully processed, acknowledge the message
+			d.Ack(false)
+		}
+	}()
+
+	app.Use(func(c *fiber.Ctx) error {
+		log.Printf("Request received: %s %s", c.Method(), c.Path())
+		return c.Next()
+	})
+
+	app.Static("/static", "./web/static")
+	log.Println("Static routes registered")
+
+	handlers.RegisterAuthRoutes(app)
+	log.Println("Auth routes registered")
+
+	handlers.RegisterUserRoutes(app)
+	log.Println("User routes registered")
+
+	handlers.RegisterVoidRoutes(app)
+	log.Println("Void routes registered")
+
+	handlers.RegisterNotificationRoutes(app)
+	log.Println("Notification routes registered")
+
+	app.Get("/test", func(c *fiber.Ctx) error {
+		log.Println("Test route hit")
+		return c.SendString("Test route working")
+	})
+
+	log.Fatal(app.Listen(":3000"))
+}
+
+----
+go.mod
+module Void
+
+go 1.23.1
+
+require (
+	github.com/gofiber/fiber/v2 v2.52.6
+	github.com/gofiber/template/html/v2 v2.1.3
+)
+
+require (
+	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/disintegration/imaging v1.6.2 // indirect
+	github.com/gofiber/template v1.8.3 // indirect
+	github.com/gofiber/utils v1.1.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/mattn/go-sqlite3 v1.14.22 // indirect
+	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/streadway/amqp v1.1.0 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fasthttp v1.51.0 // indirect
+	github.com/valyala/tcplisten v1.0.0 // indirect
+	golang.org/x/crypto v0.34.0 // indirect
+	golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
+	gorm.io/driver/sqlite v1.5.7 // indirect
+	gorm.io/gorm v1.25.12 // indirect
+)
+
+----
+go.sum
+github.com/andybalholm/brotli v1.1.0 h1:eLKJA0d02Lf0mVpIDgYnqXcUn0GqVmEFny3VuID1U3M=
+github.com/andybalholm/brotli v1.1.0/go.mod h1:sms7XGricyQI9K10gOSf56VKKWS4oLer58Q+mhRPtnY=
+github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
+github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/disintegration/imaging v1.6.2 h1:w1LecBlG2Lnp8B3jk5zSuNqd7b4DXhcjwek1ei82L+c=
+github.com/disintegration/imaging v1.6.2/go.mod h1:44/5580QXChDfwIclfc/PCwrr44amcmDAg8hxG0Ewe4=
+github.com/gofiber/fiber/v2 v2.52.6 h1:Rfp+ILPiYSvvVuIPvxrBns+HJp8qGLDnLJawAu27XVI=
+github.com/gofiber/fiber/v2 v2.52.6/go.mod h1:YEcBbO/FB+5M1IZNBP9FO3J9281zgPAreiI1oqg8nDw=
+github.com/gofiber/template v1.8.3 h1:hzHdvMwMo/T2kouz2pPCA0zGiLCeMnoGsQZBTSYgZxc=
+github.com/gofiber/template v1.8.3/go.mod h1:bs/2n0pSNPOkRa5VJ8zTIvedcI/lEYxzV3+YPXdBvq8=
+github.com/gofiber/template/html/v2 v2.1.3 h1:n1LYBtmr9C0V/k/3qBblXyMxV5B0o/gpb6dFLp8ea+o=
+github.com/gofiber/template/html/v2 v2.1.3/go.mod h1:U5Fxgc5KpyujU9OqKzy6Kn6Qup6Tm7zdsISR+VpnHRE=
+github.com/gofiber/utils v1.1.0 h1:vdEBpn7AzIUJRhe+CiTOJdUcTg4Q9RK+pEa0KPbLdrM=
+github.com/gofiber/utils v1.1.0/go.mod h1:poZpsnhBykfnY1Mc0KeEa6mSHrS3dV0+oBWyeQmb2e0=
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD/E=
+github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkryuEj+Srlc=
+github.com/jinzhu/now v1.1.5 h1:/o9tlHleP7gOFmsnYNz3RGnqzefHA47wQpKrrdTIwXQ=
+github.com/jinzhu/now v1.1.5/go.mod h1:d3SSVoowX0Lcu0IBviAWJpolVfI5UJVZZ7cO71lE/z8=
+github.com/klauspost/compress v1.17.9 h1:6KIumPrER1LHsvBVuDa0r5xaG0Es51mhhB9BQB2qeMA=
+github.com/klauspost/compress v1.17.9/go.mod h1:Di0epgTjJY877eYKx5yC51cX2A2Vl2ibi7bDH9ttBbw=
+github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
+github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
+github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
+github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
+github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
+github.com/mattn/go-runewidth v0.0.16 h1:E5ScNMtiwvlvB5paMFdw9p4kSQzbXFikJ5SQO6TULQc=
+github.com/mattn/go-runewidth v0.0.16/go.mod h1:Jdepj2loyihRzMpdS35Xk/zdY8IAYHsh153qUoGf23w=
+github.com/mattn/go-sqlite3 v1.14.22 h1:2gZY6PC6kBnID23Tichd1K+Z0oS6nE/XwU+Vz/5o4kU=
+github.com/mattn/go-sqlite3 v1.14.22/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
+github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
+github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/rivo/uniseg v0.2.0 h1:S1pD9weZBuJdFmowNwbpi7BJ8TNftyUImj/0WQi72jY=
+github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
+github.com/streadway/amqp v1.1.0 h1:py12iX8XSyI7aN/3dUT8DFIDJazNJsVJdxNVEpnQTZM=
+github.com/streadway/amqp v1.1.0/go.mod h1:WYSrTEYHOXHd0nwFeUXAe2G2hRnQT+deZJJf88uS9Bg=
+github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
+github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
+github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
+github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
+github.com/valyala/fasthttp v1.51.0 h1:8b30A5JlZ6C7AS81RsWjYMQmrZG6feChmgAolCl1SqA=
+github.com/valyala/fasthttp v1.51.0/go.mod h1:oI2XroL+lI7vdXyYoQk03bXBThfFl2cVdIA3Xl7cH8g=
+github.com/valyala/tcplisten v1.0.0 h1:rBHj/Xf+E1tRGZyWIWwJDiRY0zc1Js+CV5DqwacVSA8=
+github.com/valyala/tcplisten v1.0.0/go.mod h1:T0xQ8SeCZGxckz9qRXTfG43PvQ/mcWh7FwZEA7Ioqkc=
+golang.org/x/crypto v0.34.0 h1:+/C6tk6rf/+t5DhUketUbD1aNGqiSX3j15Z6xuIDlBA=
+golang.org/x/crypto v0.34.0/go.mod h1:dy7dXNW32cAb/6/PRuTNsix8T+vJAqvuIy5Bli/x0YQ=
+golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8 h1:hVwzHzIUGRjiF7EcUjqNxk3NCfkPxbDKRdnNE1Rpg0U=
+golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8/go.mod h1:FeLwcggjj3mMvU+oOTbSwawSJRM1uh48EjtB4UJZlP0=
+golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.30.0 h1:QjkSwP/36a20jFYWkSue1YwXzLmsV5Gfq7Eiy72C1uc=
+golang.org/x/sys v0.30.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
+golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
+golang.org/x/text v0.14.0 h1:ScX5w1eTa3QqT8oi6+ziP7dTV1S2+ALU0bI+0zXKWiQ=
+golang.org/x/text v0.14.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=
+golang.org/x/text v0.22.0 h1:bofq7m3/HAFvbF51jz3Q9wLg3jkvSPuiZu/pD1XwgtM=
+golang.org/x/text v0.22.0/go.mod h1:YRoo4H8PVmsu+E3Ou7cqLVH8oXWIHVoX0jqUWALQhfY=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+gorm.io/driver/sqlite v1.5.7 h1:8NvsrhP0ifM7LX9G4zPB97NwovUakUxc+2V2uuf3Z1I=
+gorm.io/driver/sqlite v1.5.7/go.mod h1:U+J8craQU6Fzkcvu8oLeAQmi50TkwPEhHDEjQZXDah4=
+gorm.io/gorm v1.25.7-0.20240204074919-46816ad31dde h1:9DShaph9qhkIYw7QF91I/ynrr4cOO2PZra2PFD7Mfeg=
+gorm.io/gorm v1.25.7-0.20240204074919-46816ad31dde/go.mod h1:hbnx/Oo0ChWMn1BIhpy1oYozzpM15i4YPuHDmfYtwg8=
+gorm.io/gorm v1.25.12 h1:I0u8i2hWQItBq1WfE0o2+WuL9+8L21K9e2HHSTE/0f8=
+gorm.io/gorm v1.25.12/go.mod h1:xh7N7RHfYlNc5EmcI/El95gXusucDrQnHXe0+CgWcLQ=
+
+----
+internal/db/database.go
+package db
+
+import (
+	"log"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+
+	"Void/internal/models" // Updated import path
+)
+
+// DB is a global variable that holds the GORM database connection instance.
+var DB *gorm.DB
+
+// InitDB initializes the database connection using GORM and performs schema migrations for the given models.
+func InitDB() {
+	var err error
+	DB, err = gorm.Open(sqlite.Open("void.db"), &gorm.Config{})
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+
+	DB.AutoMigrate(&models.Shout{}, &models.Echo{}, &models.User{}, &models.Notification{})
+}
+
+----
+internal/events/event.go
+package events
+
+// ShoutEvent is an interface representing the data needed for a shout event.
+type ShoutEvent interface {
+	GetShoutID() uint
+	GetContent() string
+	GetUserID() uint
+	GetUsername() string
+}
+
+----
+internal/events/publisher.go
+package events
+
+import (
+	"encoding/json"
+	"log"
+
+	"Void/pkg/rabbitmq"
+)
+
+// PublishShoutEvent publishes a shout event.
+// It depends solely on the ShoutEvent interface.
+func PublishShoutEvent(event ShoutEvent) error {
+	msg, err := json.Marshal(event)
+	if err != nil {
+		log.Printf("Failed to marshal event: %v", err)
+		return err
+	}
+	if err := rabbitmq.PublishNotification(msg); err != nil {
+		log.Printf("Failed to publish event: %v", err)
+		return err
+	}
+	log.Printf("Published shout event for shout ID: %d", event.GetShoutID())
+	return nil
+}
+
+----
+internal/handlers/auth.go
+package handlers
+
+import (
+	"Void/internal/middleware"
+	"Void/pkg/session"
+	"log"
+
+	"github.com/gofiber/fiber/v2"
+	"golang.org/x/crypto/bcrypt"
+
+	"Void/internal/db"
+	"Void/internal/models"
+)
+
+// RegisterAuthRoutes registers all authentication-related routes, including registration, login, and logout handlers.
+func RegisterAuthRoutes(app *fiber.App) {
+	app.Get("/register", middleware.GetUserFromSession, ShowRegister)
+	app.Post("/register", middleware.GetUserFromSession, Register)
+	app.Get("/login", middleware.GetUserFromSession, ShowLogin)
+	app.Post("/login", middleware.GetUserFromSession, Login)
+	app.Get("/logout", middleware.GetUserFromSession, Logout)
+}
+
+// ShowRegister renders the registration page using the "register" template and the "layouts/main" layout.
+func ShowRegister(c *fiber.Ctx) error {
+
+	return c.Render("register", fiber.Map{
+		"UserID": nil,
+	}, "layouts/main")
+}
+
+// Register handles user registration by creating a new user with hashed password and saving it to the database.
+// It validates required input fields (username, email, password) and redirects to the login page upon success.
+// Returns an error or appropriate HTTP response in case of failure or missing fields.
+func Register(c *fiber.Ctx) error {
+	username := c.FormValue("username")
+	email := c.FormValue("email")
+	password := c.FormValue("password")
+
+	if username == "" || email == "" || password == "" {
+		return c.SendString("All fields are required")
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return c.Status(500).SendString("Error processing password")
+	}
+
+	user := models.User{
+		Username: username,
+		Email:    email,
+		Password: string(hashedPassword),
+	}
+	db.DB.Create(&user)
+
+	return c.Redirect("/login")
+}
+
+// ShowLogin renders the login page using the "login" template and the "layouts/main" layout.
+func ShowLogin(c *fiber.Ctx) error {
+	log.Println("Rendering login template")
+	return c.Render("login", fiber.Map{
+		"UserID": nil,
+	}, "layouts/main")
+}
+
+// Login handles user authentication by verifying their email and password and establishes a session upon success.
+// It fetches the user from the database using the provided email and validates the password using bcrypt.
+// On successful authentication, the user's ID is saved in the session, and the user is redirected to the homepage.
+// Returns an error response in case of missing user, invalid credentials, or session handling issues.
+func Login(c *fiber.Ctx) error {
+	log.Println("Login handler reached")
+	email := c.FormValue("email")
+	password := c.FormValue("password")
+
+	var user models.User
+	result := db.DB.Where("email = ?", email).First(&user)
+	if result.Error != nil {
+		return c.SendString("User not found")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return c.SendString("Invalid credentials")
+	}
+
+	// Set the user ID in the session using our session package helper.
+	if err := session.SetUserID(c, user.ID); err != nil {
+		return c.Status(500).SendString("Failed to save session")
+	}
+
+	return c.Redirect("/")
+}
+
+// Logout terminates the user's session and redirects them to the login page. Returns an error on failure.
+func Logout(c *fiber.Ctx) error {
+	if err := session.DestroySession(c); err != nil {
+		return c.Status(500).SendString("Failed to Log out.")
+	}
+	return c.Redirect("/login")
+}
+
+----
+internal/handlers/notifications.go
+package handlers
+
+import (
+	"log"
+
+	"github.com/gofiber/fiber/v2"
+
+	"Void/internal/db"
+	"Void/internal/middleware"
+	"Void/internal/models"
+)
+
+func RegisterNotificationRoutes(app *fiber.App) {
+	// Group this route so that only logged-in users can access it.
+	authGroup := app.Group("/", middleware.GetUserFromSession, middleware.RequireLogin)
+	authGroup.Get("/notifications", middleware.GetUserFromSession, GetNotifications)
+	authGroup.Get("/notifications/:id/read", middleware.GetUserFromSession, MarkNotificationAsRead)
+
+}
+
+// GetNotifications retrieves notifications for the logged-in user and renders them.
+func GetNotifications(c *fiber.Ctx) error {
+	// Get session and the user ID
+	uid := c.Locals("UserID").(uint)
+	if uid != 0 {
+		// Query the notifications for this user, ordered by newest first.
+		var notifications []models.Notification
+		if err := db.DB.
+			Where("user_id = ?", uid).
+			Order("created_at desc").
+			Find(&notifications).Error; err != nil {
+			log.Printf("Error fetching notifications: %v", err)
+			return c.Status(500).SendString("Error fetching notifications")
+		}
+
+		var count int64
+		db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
+		// Render the notifications view.
+		return c.Render("notifications", fiber.Map{
+			"Notifications":     notifications,
+			"UserID":            uid,
+			"NotificationCount": count,
+		}, "layouts/main")
+	}
+
+	return c.Redirect("/login")
+}
+
+// MarkNotificationAsRead marks a specific notification as read for the currently logged-in user.
+// It validates the session, ensures the notification exists, and belongs to the user before updating it.
+// Redirects the user to the notifications page upon success. Returns an error or HTTP status code on failure.
+func MarkNotificationAsRead(c *fiber.Ctx) error {
+	// Retrieve the session and user id.
+	uid := c.Locals("UserID").(uint)
+
+	// Get the notification id from the URL.
+	notifID := c.Params("id")
+	var notif models.Notification
+	if err := db.DB.First(&notif, notifID).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).SendString("Notification not found")
+	}
+
+	// Ensure the notification belongs to the current user.
+	if notif.UserID != uid {
+		return c.Status(fiber.StatusForbidden).SendString("Access denied")
+	}
+
+	// Mark the notification as read.
+	notif.Read = true
+	if err := db.DB.Save(&notif).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString("Failed to mark notification as read")
+	}
+
+	// Redirect back to the notifications page.
+	return c.Redirect("/notifications")
+}
+
+----
+internal/handlers/users.go
+package handlers
+
+import (
+	"Void/internal/db"
+	"Void/internal/middleware"
+	"Void/internal/models"
+	"fmt"
+	"github.com/disintegration/imaging"
+	"github.com/gofiber/fiber/v2"
+	"log"
+	"os"
+)
+
+// RegisterUserRoutes registers user-related routes to the provided fiber app instance.
+func RegisterUserRoutes(app *fiber.App) {
+	app.Get("/users/:username", middleware.GetUserFromSession, GetProfile)
+	app.Get("/profile/edit", middleware.GetUserFromSession, ShowEditProfile)
+	app.Post("/profile/edit", middleware.GetUserFromSession, UpdateProfile)
+}
+
+// GetProfile handles HTTP GET requests to retrieve a user profile based on the provided username parameter.
+func GetProfile(c *fiber.Ctx) error {
+	//get the user and their shouts
+	uid := c.Locals("UserID").(uint)
+	log.Println("Getting profile for user: ", c.Params("username"))
+	username := c.Params("username")
+
+	var user models.User
+	result := db.DB.First(&user, "username = ?", username)
+	if result.Error != nil {
+		return c.SendString("User not found")
+	}
+
+	var shouts []models.Shout
+	if err := db.DB.Where("user_id = ?", user.ID).Order("created_at desc").Find(&shouts).Error; err != nil {
+		log.Printf("Error fetching shouts for user %s: %v", username, err)
+	}
+
+	//render the profile, no authentication should be required.
+	return c.Render("profile", fiber.Map{
+		"User":   user,
+		"UserID": uid,
+		"Shouts": shouts,
+	}, "layouts/main")
+
+}
+
+// ShowEditProfile renders the edit profile form.
+func ShowEditProfile(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	var user models.User
+	if err := db.DB.First(&user, uid).Error; err != nil {
+		return c.SendString("User not found")
+	}
+	return c.Render("edit_profile", fiber.Map{
+		"User": user,
+	}, "layouts/main")
+}
+
+// UpdateProfile processes the form submission to update avatar and bio.
+func UpdateProfile(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+	var user models.User
+	if err := db.DB.First(&user, uid).Error; err != nil {
+		return c.SendString("User not found")
+	}
+
+	// Update bio
+	bio := c.FormValue("bio")
+	user.Bio = bio
+
+	// Process avatar file upload if provided.
+	file, err := c.FormFile("avatar")
+	if err == nil { // file was uploaded
+		// Save the uploaded file temporarily.
+		tempPath := "./tmp/" + file.Filename
+		if err := c.SaveFile(file, tempPath); err != nil {
+			return c.Status(500).SendString("Error saving avatar file")
+		}
+
+		// Open the saved file.
+		srcImage, err := imaging.Open(tempPath)
+		if err != nil {
+			os.Remove(tempPath)
+			return c.Status(500).SendString("Error opening uploaded image")
+		}
+
+		// Resize image to a fixed size (e.g., 200x200 pixels).
+		resizedImage := imaging.Resize(srcImage, 200, 200, imaging.Lanczos)
+
+		// Generate a unique filename.
+		avatarFilename := fmt.Sprintf("%d_%s", uid, file.Filename)
+		avatarPath := "./web/static/uploads/avatars/" + avatarFilename
+
+		// Save the processed image.
+		if err := imaging.Save(resizedImage, avatarPath); err != nil {
+			os.Remove(tempPath)
+			return c.Status(500).SendString("Error saving processed avatar image")
+		}
+
+		// Clean up temporary file.
+		os.Remove(tempPath)
+
+		// Update user's Avatar field.
+		user.Avatar = "/static/uploads/avatars/" + avatarFilename
+	}
+
+	// Save updated user info.
+	if err := db.DB.Save(&user).Error; err != nil {
+		return c.Status(500).SendString("Error updating profile")
+	}
+
+	return c.Redirect("/users/" + user.Username)
+}
+
+----
+internal/handlers/void.go
+package handlers
+
+import (
+	"Void/internal/events"
+	"log"
+
+	"Void/internal/db"
+	"Void/internal/middleware"
+	"Void/internal/models"
+	"github.com/gofiber/fiber/v2"
+)
+
+// RegisterVoidRoutes configures routes for both global and authenticated functionalities for the app.
+func RegisterVoidRoutes(app *fiber.App) {
+	// Register these FIRST - before the auth group
+	app.Get("/echo-chamber", middleware.GetUserFromSession, GetGlobalFeed)
+	app.Get("/global/shout/:id", middleware.GetUserFromSession, GetGlobalShout)
+	app.Post("/global/shout/:id/echo", middleware.GetUserFromSession, CreateGlobalEcho)
+	// Then register the auth group
+	authGroup := app.Group("/", middleware.GetUserFromSession, middleware.RequireLogin)
+	authGroup.Get("/", GetShouts)
+	authGroup.Post("/shout", CreateShout)
+	authGroup.Get("/shout/:id", GetShout)
+	authGroup.Post("/shout/:id/echo", CreateEcho)
+	authGroup.Get("/shout/:id/edit", EditShoutForm)
+	authGroup.Post("/shout/:id/update", UpdateShout)
+	authGroup.Post("/shout/:id/delete", DeleteShout)
+}
+
+// GetShouts retrieves all shouts for the logged-in user.
+func GetShouts(c *fiber.Ctx) error {
+	log.Println("=== GetShouts handler started ===")
+
+	uid := c.Locals("UserID").(uint)
+
+	log.Printf("UserID from session: %v", uid)
+	var shouts []models.Shout
+	result := db.DB.Preload("Echoes").Where("user_id = ?", uid).Find(&shouts)
+	if result.Error != nil {
+		log.Printf("Database error: %v", result.Error)
+		return c.Status(500).SendString("Database error")
+	}
+
+	log.Printf("Found %d shouts for user %d", len(shouts), uid)
+	log.Println("Attempting to render index template")
+
+	var count int64
+	db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
+	return c.Render("index", fiber.Map{
+		"Shouts":            shouts,
+		"UserID":            uid,
+		"NotificationCount": count,
+	}, "layouts/main")
+}
+
+// CreateShout processes a request to create a new shout and persist it in the database, while managing related operations.
+// Retrieves the user ID from the session and validates the input shout content.
+// Saves the new shout to the database and populates its related user data for enriching event publication.
+// Converts the shout into an event payload and publishes the event using the configured messaging mechanism.
+// Redirects the user after successful creation or handles errors appropriately during the process.
+func CreateShout(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	content := c.FormValue("content")
+	if content == "" {
+		return c.Redirect("/")
+	}
+
+	shout := models.Shout{
+		Content: content,
+		UserID:  uid,
+	}
+
+	// Save the shout to the database.
+	if err := db.DB.Create(&shout).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+
+	// Load the associated user (to fill in Username, etc.)
+	if err := db.DB.First(&shout.User, uid).Error; err != nil {
+		log.Printf("Failed to load user: %v", err)
+		// Continue even if this fails.
+	}
+
+	// Convert the shout to its event payload.
+	eventPayload := shout.ToEvent()
+
+	// Publish the event using the interface-based function.
+	if err := events.PublishShoutEvent(eventPayload); err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+
+	return c.Redirect("/")
+}
+
+// GetShout retrieves a single shout.
+func GetShout(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	id := c.Params("id")
+	var shout models.Shout
+	result := db.DB.Preload("Echoes").First(&shout, id)
+	if result.Error != nil {
+		return c.SendStatus(404)
+	}
+	if shout.UserID != uid {
+		return c.Status(403).SendString("Access denied")
+	}
+	var count int64
+	db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
+	return c.Render("shout", fiber.Map{
+		"Shout":             shout,
+		"UserID":            uid,
+		"NotificationCount": count,
+	}, "layouts/main")
+}
+
+// CreateEcho handles the creation of echoes for shouts.
+func CreateEcho(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	id := c.Params("id")
+	var shout models.Shout
+	if err := db.DB.First(&shout, id).Error; err != nil {
+		return c.Status(404).SendString("Shout not found")
+	}
+
+	if shout.UserID != uid {
+		return c.Status(403).SendString("Unauthorized")
+	}
+
+	content := c.FormValue("content")
+	if content == "" {
+		return c.Redirect("/shout/" + id)
+	}
+
+	echo := models.Echo{
+		Content: content,
+		ShoutID: shout.ID,
+	}
+
+	if err := echo.Create(db.DB); err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+
+	return c.Redirect("/shout/" + id)
+}
+
+// GetGlobalFeed retrieves all global shouts.
+func GetGlobalFeed(c *fiber.Ctx) error {
+	log.Println("GetGlobalFeed handler started")
+	var shouts []models.Shout
+	result := db.DB.Preload("Echoes").Preload("User").Order("created_at desc").Find(&shouts)
+	if result.Error != nil {
+		log.Printf("Database error: %v", result.Error)
+		return c.Status(500).SendString("Database error")
+	}
+	log.Printf("Found %d global shouts", len(shouts))
+
+	uid := c.Locals("UserID").(uint)
+	if uid == 0 {
+		// If no valid user is found, render with nil UserID
+		return c.Render("echo_chamber", fiber.Map{
+			"Shouts": shouts,
+			"UserID": nil,
+		}, "layouts/main")
+	}
+
+	var count int64
+	db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
+	return c.Render("echo_chamber", fiber.Map{
+		"Shouts":            shouts,
+		"UserID":            uid,
+		"NotificationCount": count,
+	}, "layouts/main")
+}
+
+// GetGlobalShout retrieves a single global shout.
+func GetGlobalShout(c *fiber.Ctx) error {
+	// Try to get the user ID; if there's an error or uid is zero, treat the user as anonymous.
+	uid := c.Locals("UserID").(uint)
+
+	// Get the shout ID from the URL.
+	id := c.Params("id")
+	var shout models.Shout
+	result := db.DB.Preload("Echoes").Preload("User").First(&shout, id)
+	if result.Error != nil {
+		return c.SendStatus(404)
+	}
+
+	// If a valid user is logged in, fetch notification count.
+	if uid != 0 {
+		var count int64
+		db.DB.Model(&models.Notification{}).
+			Where("user_id = ? AND read = ?", uid, false).
+			Count(&count)
+		return c.Render("global_shout", fiber.Map{
+			"Shout":             shout,
+			"UserID":            uid,
+			"NotificationCount": count,
+		}, "layouts/main")
+	}
+
+	// Otherwise, render without user-specific data.
+	return c.Render("global_shout", fiber.Map{
+		"Shout":  shout,
+		"UserID": nil,
+	}, "layouts/main")
+}
+
+// CreateGlobalEcho handles the creation of echoes for global shouts.
+func CreateGlobalEcho(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	if uid == 0 {
+		return c.Redirect("/login")
+	}
+
+	id := c.Params("id")
+	var shout models.Shout
+	result := db.DB.First(&shout, id)
+	if result.Error != nil {
+		return c.SendStatus(404)
+	}
+
+	content := c.FormValue("content")
+	if content == "" {
+		return c.Redirect("/global/shout/" + id)
+	}
+	echo := models.Echo{Content: content, ShoutID: shout.ID}
+	db.DB.Create(&echo)
+	return c.Redirect("/global/shout/" + id)
+}
+
+// EditShoutForm renders the edit form for a given shout.
+func EditShoutForm(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	shoutID := c.Params("id")
+	var shout models.Shout
+	if err := db.DB.First(&shout, shoutID).Error; err != nil {
+		return c.Status(404).SendString("Shout not found")
+	}
+
+	// Ensure that the shout belongs to the logged-in user.
+	if shout.UserID != uid {
+		return c.Status(403).SendString("Unauthorized")
+	}
+
+	var count int64
+	db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
+	return c.Render("edit_shout", fiber.Map{
+		"Shout":             shout,
+		"UserID":            uid,
+		"NotificationCount": count,
+	}, "layouts/main")
+}
+
+// UpdateShout handles the update request.
+func UpdateShout(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	shoutID := c.Params("id")
+	var shout models.Shout
+	if err := db.DB.First(&shout, shoutID).Error; err != nil {
+		return c.Status(404).SendString("Shout not found")
+	}
+
+	if shout.UserID != uid {
+		return c.Status(403).SendString("Unauthorized")
+	}
+
+	newContent := c.FormValue("content")
+	if err := shout.UpdateContent(db.DB, newContent); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+
+	return c.Redirect("/shout/" + shoutID)
+}
+
+// DeleteShout handles deleting a shout.
+func DeleteShout(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	shoutID := c.Params("id")
+	var shout models.Shout
+	if err := db.DB.First(&shout, shoutID).Error; err != nil {
+		return c.Status(404).SendString("Shout not found")
+	}
+
+	// Ensure the shout belongs to the logged-in user
+	if shout.UserID != uid {
+		return c.Status(403).SendString("Unauthorized")
+	}
+
+	if err := db.DB.Delete(&shout).Error; err != nil {
+		return c.Status(500).SendString("Failed to delete shout")
+	}
+
+	return c.Redirect("/")
+}
+
+----
+internal/middleware/get_user_from_session.go
+package middleware
+
+import (
+	"Void/pkg/session"
+	"github.com/gofiber/fiber/v2"
+)
+
+func GetUserFromSession(c *fiber.Ctx) error {
+	uid, _ := session.GetUserID(c)
+
+	c.Locals("UserID", uid)
+	return c.Next()
+}
+
+----
+internal/middleware/require_login.go
+package middleware
+
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
+// RequireLogin checks if the user is logged in.
+func RequireLogin(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+	if uid == 0 {
+		return c.Redirect("/login")
+	}
+	return c.Next()
+}
+
+----
+internal/models/echo.go
+package models
+
+import (
+	"errors"
+	"gorm.io/gorm"
+)
+
+// Echo represents a reply (echo) to a shout.
+type Echo struct {
+	gorm.Model
+	Content string `gorm:"not null"`
+	ShoutID uint   `gorm:"not null"`
+}
+
+// Create persists the echo using the provided DB instance.
+// It also performs a simple validation to ensure content is not empty.
+func (e *Echo) Create(db *gorm.DB) error {
+	if e.Content == "" {
+		return errors.New("echo content cannot be empty")
+	}
+	return db.Create(e).Error
+}
+
+----
+internal/models/notification.go
+package models
+
+import "gorm.io/gorm"
+
+// Notification represents a notification for a user.
+type Notification struct {
+	gorm.Model
+	UserID         uint   `gorm:"not null"` // The recipient's ID
+	Message        string `gorm:"not null"` // The plain text message
+	AuthorUsername string // The username of the shout's author
+	ShoutID        uint   // Optional: the ID of the related shout
+	Read           bool   `gorm:"default:false"`
+}
+
+----
+internal/models/shout..go
+package models
+
+import (
+	"encoding/json"
+	"errors"
+	"log"
+
+	"Void/pkg/rabbitmq"
+
+	"gorm.io/gorm"
+)
+
+// Shout represents a post in Void.
+type Shout struct {
+	gorm.Model
+	Content string `gorm:"not null"`
+	UserID  uint   `gorm:"not null"`
+	User    User   // Association to the user.
+	Echoes  []Echo `gorm:"foreignKey:ShoutID"`
+}
+
+// ShoutCreatedEvent is the event payload for when a shout is created.
+// It lives in the models package because it's closely related to the domain.
+type ShoutCreatedEvent struct {
+	ShoutID  uint   `json:"shout_id"`
+	Content  string `json:"content"`
+	UserID   uint   `json:"user_id"`
+	Username string `json:"username"`
+}
+
+// ToEvent converts a Shout to a ShoutCreatedEvent.
+func (s *Shout) ToEvent() ShoutCreatedEvent {
+	return ShoutCreatedEvent{
+		ShoutID:  s.ID,
+		Content:  s.Content,
+		UserID:   s.UserID,
+		Username: s.User.Username,
+	}
+}
+
+// The following methods implement the interface defined in the events package.
+// This way, the events package can depend solely on an interface rather than a concrete type.
+
+// GetShoutID returns the unique identifier of the shout associated with this event.
+func (e ShoutCreatedEvent) GetShoutID() uint {
+	return e.ShoutID
+}
+
+// GetContent retrieves the content of the shout associated with the ShoutCreatedEvent.
+func (e ShoutCreatedEvent) GetContent() string {
+	return e.Content
+}
+
+// GetUserID retrieves the unique identifier of the user associated with the ShoutCreatedEvent.
+func (e ShoutCreatedEvent) GetUserID() uint {
+	return e.UserID
+}
+
+// GetUsername retrieves the username of the user associated with the ShoutCreatedEvent.
+func (e ShoutCreatedEvent) GetUsername() string {
+	return e.Username
+}
+
+// Create persists the shout using the provided DB instance and publishes a notification event.
+func (s *Shout) Create(db *gorm.DB) error {
+	// Save the shout to the database using the injected DB.
+	if err := db.Create(s).Error; err != nil {
+		return err
+	}
+
+	// Load the associated user record so that s.User is populated.
+	if err := db.First(&s.User, s.UserID).Error; err != nil {
+		log.Printf("Failed to load user: %v", err)
+		// Continue even if loading the user fails.
+	}
+
+	// Create an event payload using the shared type.
+	eventPayload := ShoutCreatedEvent{
+		ShoutID:  s.ID,
+		Content:  s.Content,
+		UserID:   s.UserID,
+		Username: s.User.Username,
+	}
+
+	// Marshal the event payload to JSON.
+	msg, err := json.Marshal(eventPayload)
+	if err != nil {
+		log.Printf("Failed to marshal event payload: %v", err)
+		return err
+	}
+
+	// Publish the notification event.
+	if err := rabbitmq.PublishNotification(msg); err != nil {
+		log.Printf("Failed to publish notification: %v", err)
+		return err
+	}
+
+	log.Printf("Published notification for shout ID: %d", s.ID)
+	return nil
+}
+
+// UpdateContent updates the shout's content with some basic validation.
+func (s *Shout) UpdateContent(db *gorm.DB, newContent string) error {
+	if newContent == "" {
+		return errors.New("new content cannot be empty")
+	}
+	s.Content = newContent
+	return db.Save(s).Error
+}
+
+// Delete removes the shout from the database.
+func (s *Shout) Delete(db *gorm.DB) error {
+	return db.Delete(s).Error
+}
+
+----
+internal/models/user.go
+package models
+
+import "gorm.io/gorm"
+
+// User represents a registered user.
+type User struct {
+	gorm.Model
+	Username string `gorm:"unique;not null"`
+	Email    string `gorm:"unique;not null"`
+	Password string `gorm:"not null"`
+	Avatar   string // Path to avatar file
+	Bio      string // Optional user bio
+}
+
+----
+internal/services/notifications/notify.go
+package notifications
+
+import (
+	"log"
+
+	"Void/internal/db"
+	"Void/internal/events"
+	"Void/internal/models"
+)
+
+// SendNewShoutNotifications sends a notification to every user except the shout's author.
+func SendNewShoutNotifications(event events.ShoutEvent) {
+	log.Printf("Creating notifications for shout ID: %d", event.GetShoutID())
+	var recipients []models.User
+
+	if err := db.DB.
+		Where("id != ?", event.GetUserID()).
+		Find(&recipients).Error; err != nil {
+		log.Printf("Error fetching recipients: %v", err)
+		return
+	}
+
+	log.Printf("Found %d recipients", len(recipients))
+
+	for _, user := range recipients {
+		notification := models.Notification{
+			UserID:         user.ID,
+			Message:        truncate(event.GetContent(), 50),
+			AuthorUsername: event.GetUsername(),
+			ShoutID:        event.GetShoutID(),
+		}
+		if err := db.DB.Create(&notification).Error; err != nil {
+			log.Printf("Error creating notification for user %d: %v", user.ID, err)
+		} else {
+			log.Printf("Created notification ID %d for user %d", notification.ID, user.ID)
+		}
+	}
+}
+
+// truncate shortens a string to a specified length and appends "..." if truncation occurs.
+func truncate(s string, n int) string {
+	if len(s) > n {
+		return s[:n] + "..."
+	}
+	return s
+}
+
+----
+output.txt
+The following text is a Git repository with code. The structure of the text are sections that begin with ----, followed by a single line containing the file path and file name, followed by a variable amount of lines containing the file contents. The text representing the Git repository ends when the symbols --END-- are encountered. Any further text beyond --END-- are meant to be interpreted as instructions using the aforementioned Git repository as context.
+----
+.air.toml
+# .air.toml
+
+# Root directory of your project.
+root = "."
+
+# Directory to put the temporary build output.
+tmp_dir = "tmp"
+
+[build]
+# The command to build your Go application.
+cmd = "go build -o ./tmp/main ./cmd/server"
+# The resulting binary that air will run.
+bin = "./tmp/main"
+# File extensions to watch for changes.
+include_ext = ["go", "html", "tmpl", "tpl", "css", "js"]
+# Directories to exclude from watching.
+exclude_dir = ["vendor", "tmp"]
+# Files to exclude from watching.
+exclude_file = ["air.conf", "air.toml"]
+
+[log]
+timestamp = true
+----
+cmd/server/main.go
+package main
+
+import (
+	"encoding/json"
+	"log"
+	"os"
+	"time"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/template/html/v2"
+
+	"Void/internal/db"
+	"Void/internal/handlers"
+	"Void/internal/models"
+	"Void/internal/services/notifications"
+	"Void/pkg/rabbitmq"
+	"Void/pkg/session"
+)
+
+// In main.go
+func main() {
+	db.InitDB()
+
+	session.InitStore()
+
+	// Initialize the RabbitMQ connection.
+	if err := rabbitmq.Init("amqp://guest:guest@localhost:5672/"); err != nil {
+		log.Fatalf("Failed to initialize RabbitMQ: %v", err)
+	}
+	log.Println("RabbitMQ connected successfully.")
+
+	// Add this before engine initialization
+	templates, err := os.ReadDir("./web/templates")
+	if err != nil {
+		log.Fatalf("Failed to read templates directory: %v", err)
+	}
+	for _, template := range templates {
+		log.Printf("Found template: %s", template.Name())
+	}
+
+	engine := html.New("./web/templates", ".html")
+	engine.AddFunc("formatDate", func(t time.Time) string {
+		return t.Format("Jan 2, 2006 at 3:04pm")
+	})
+	engine.Debug(true)
+
+	app := fiber.New(fiber.Config{
+		Views: engine,
+	})
+
+	go func() {
+		msgs, err := rabbitmq.ConsumeNotifications()
+		if err != nil {
+			log.Fatalf("Failed to start consumer: %v", err)
+		}
+		for d := range msgs {
+			log.Printf("Received notification message: %s", d.Body)
+
+			var event models.ShoutCreatedEvent
+			if err := json.Unmarshal(d.Body, &event); err != nil {
+				log.Printf("Error unmarshalling event: %v", err)
+				d.Nack(false, true) // Bad message, requeue it
+				continue
+			}
+
+			// Process the event (no error check needed)
+			notifications.SendNewShoutNotifications(event)
+
+			// Successfully processed, acknowledge the message
+			d.Ack(false)
+		}
+	}()
+
+	app.Use(func(c *fiber.Ctx) error {
+		log.Printf("Request received: %s %s", c.Method(), c.Path())
+		return c.Next()
+	})
+
+	app.Static("/static", "./web/static")
+	log.Println("Static routes registered")
+
+	handlers.RegisterAuthRoutes(app)
+	log.Println("Auth routes registered")
+
+	handlers.RegisterUserRoutes(app)
+	log.Println("User routes registered")
+
+	handlers.RegisterVoidRoutes(app)
+	log.Println("Void routes registered")
+
+	handlers.RegisterNotificationRoutes(app)
+	log.Println("Notification routes registered")
+
+	app.Get("/test", func(c *fiber.Ctx) error {
+		log.Println("Test route hit")
+		return c.SendString("Test route working")
+	})
+
+	log.Fatal(app.Listen(":3000"))
+}
+
+----
+go.mod
+module Void
+
+go 1.23.1
+
+require (
+	github.com/gofiber/fiber/v2 v2.52.6
+	github.com/gofiber/template/html/v2 v2.1.3
+)
+
+require (
+	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/disintegration/imaging v1.6.2 // indirect
+	github.com/gofiber/template v1.8.3 // indirect
+	github.com/gofiber/utils v1.1.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/mattn/go-sqlite3 v1.14.22 // indirect
+	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/streadway/amqp v1.1.0 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fasthttp v1.51.0 // indirect
+	github.com/valyala/tcplisten v1.0.0 // indirect
+	golang.org/x/crypto v0.34.0 // indirect
+	golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
+	gorm.io/driver/sqlite v1.5.7 // indirect
+	gorm.io/gorm v1.25.12 // indirect
+)
+
+----
+go.sum
+github.com/andybalholm/brotli v1.1.0 h1:eLKJA0d02Lf0mVpIDgYnqXcUn0GqVmEFny3VuID1U3M=
+github.com/andybalholm/brotli v1.1.0/go.mod h1:sms7XGricyQI9K10gOSf56VKKWS4oLer58Q+mhRPtnY=
+github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
+github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/disintegration/imaging v1.6.2 h1:w1LecBlG2Lnp8B3jk5zSuNqd7b4DXhcjwek1ei82L+c=
+github.com/disintegration/imaging v1.6.2/go.mod h1:44/5580QXChDfwIclfc/PCwrr44amcmDAg8hxG0Ewe4=
+github.com/gofiber/fiber/v2 v2.52.6 h1:Rfp+ILPiYSvvVuIPvxrBns+HJp8qGLDnLJawAu27XVI=
+github.com/gofiber/fiber/v2 v2.52.6/go.mod h1:YEcBbO/FB+5M1IZNBP9FO3J9281zgPAreiI1oqg8nDw=
+github.com/gofiber/template v1.8.3 h1:hzHdvMwMo/T2kouz2pPCA0zGiLCeMnoGsQZBTSYgZxc=
+github.com/gofiber/template v1.8.3/go.mod h1:bs/2n0pSNPOkRa5VJ8zTIvedcI/lEYxzV3+YPXdBvq8=
+github.com/gofiber/template/html/v2 v2.1.3 h1:n1LYBtmr9C0V/k/3qBblXyMxV5B0o/gpb6dFLp8ea+o=
+github.com/gofiber/template/html/v2 v2.1.3/go.mod h1:U5Fxgc5KpyujU9OqKzy6Kn6Qup6Tm7zdsISR+VpnHRE=
+github.com/gofiber/utils v1.1.0 h1:vdEBpn7AzIUJRhe+CiTOJdUcTg4Q9RK+pEa0KPbLdrM=
+github.com/gofiber/utils v1.1.0/go.mod h1:poZpsnhBykfnY1Mc0KeEa6mSHrS3dV0+oBWyeQmb2e0=
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD/E=
+github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkryuEj+Srlc=
+github.com/jinzhu/now v1.1.5 h1:/o9tlHleP7gOFmsnYNz3RGnqzefHA47wQpKrrdTIwXQ=
+github.com/jinzhu/now v1.1.5/go.mod h1:d3SSVoowX0Lcu0IBviAWJpolVfI5UJVZZ7cO71lE/z8=
+github.com/klauspost/compress v1.17.9 h1:6KIumPrER1LHsvBVuDa0r5xaG0Es51mhhB9BQB2qeMA=
+github.com/klauspost/compress v1.17.9/go.mod h1:Di0epgTjJY877eYKx5yC51cX2A2Vl2ibi7bDH9ttBbw=
+github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
+github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
+github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
+github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
+github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
+github.com/mattn/go-runewidth v0.0.16 h1:E5ScNMtiwvlvB5paMFdw9p4kSQzbXFikJ5SQO6TULQc=
+github.com/mattn/go-runewidth v0.0.16/go.mod h1:Jdepj2loyihRzMpdS35Xk/zdY8IAYHsh153qUoGf23w=
+github.com/mattn/go-sqlite3 v1.14.22 h1:2gZY6PC6kBnID23Tichd1K+Z0oS6nE/XwU+Vz/5o4kU=
+github.com/mattn/go-sqlite3 v1.14.22/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
+github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
+github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/rivo/uniseg v0.2.0 h1:S1pD9weZBuJdFmowNwbpi7BJ8TNftyUImj/0WQi72jY=
+github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
+github.com/streadway/amqp v1.1.0 h1:py12iX8XSyI7aN/3dUT8DFIDJazNJsVJdxNVEpnQTZM=
+github.com/streadway/amqp v1.1.0/go.mod h1:WYSrTEYHOXHd0nwFeUXAe2G2hRnQT+deZJJf88uS9Bg=
+github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
+github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
+github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
+github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
+github.com/valyala/fasthttp v1.51.0 h1:8b30A5JlZ6C7AS81RsWjYMQmrZG6feChmgAolCl1SqA=
+github.com/valyala/fasthttp v1.51.0/go.mod h1:oI2XroL+lI7vdXyYoQk03bXBThfFl2cVdIA3Xl7cH8g=
+github.com/valyala/tcplisten v1.0.0 h1:rBHj/Xf+E1tRGZyWIWwJDiRY0zc1Js+CV5DqwacVSA8=
+github.com/valyala/tcplisten v1.0.0/go.mod h1:T0xQ8SeCZGxckz9qRXTfG43PvQ/mcWh7FwZEA7Ioqkc=
+golang.org/x/crypto v0.34.0 h1:+/C6tk6rf/+t5DhUketUbD1aNGqiSX3j15Z6xuIDlBA=
+golang.org/x/crypto v0.34.0/go.mod h1:dy7dXNW32cAb/6/PRuTNsix8T+vJAqvuIy5Bli/x0YQ=
+golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8 h1:hVwzHzIUGRjiF7EcUjqNxk3NCfkPxbDKRdnNE1Rpg0U=
+golang.org/x/image v0.0.0-20191009234506-e7c1f5e7dbb8/go.mod h1:FeLwcggjj3mMvU+oOTbSwawSJRM1uh48EjtB4UJZlP0=
+golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.30.0 h1:QjkSwP/36a20jFYWkSue1YwXzLmsV5Gfq7Eiy72C1uc=
+golang.org/x/sys v0.30.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
+golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
+golang.org/x/text v0.14.0 h1:ScX5w1eTa3QqT8oi6+ziP7dTV1S2+ALU0bI+0zXKWiQ=
+golang.org/x/text v0.14.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=
+golang.org/x/text v0.22.0 h1:bofq7m3/HAFvbF51jz3Q9wLg3jkvSPuiZu/pD1XwgtM=
+golang.org/x/text v0.22.0/go.mod h1:YRoo4H8PVmsu+E3Ou7cqLVH8oXWIHVoX0jqUWALQhfY=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+gorm.io/driver/sqlite v1.5.7 h1:8NvsrhP0ifM7LX9G4zPB97NwovUakUxc+2V2uuf3Z1I=
+gorm.io/driver/sqlite v1.5.7/go.mod h1:U+J8craQU6Fzkcvu8oLeAQmi50TkwPEhHDEjQZXDah4=
+gorm.io/gorm v1.25.7-0.20240204074919-46816ad31dde h1:9DShaph9qhkIYw7QF91I/ynrr4cOO2PZra2PFD7Mfeg=
+gorm.io/gorm v1.25.7-0.20240204074919-46816ad31dde/go.mod h1:hbnx/Oo0ChWMn1BIhpy1oYozzpM15i4YPuHDmfYtwg8=
+gorm.io/gorm v1.25.12 h1:I0u8i2hWQItBq1WfE0o2+WuL9+8L21K9e2HHSTE/0f8=
+gorm.io/gorm v1.25.12/go.mod h1:xh7N7RHfYlNc5EmcI/El95gXusucDrQnHXe0+CgWcLQ=
+
+----
+internal/db/database.go
+package db
+
+import (
+	"log"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+
+	"Void/internal/models" // Updated import path
+)
+
+// DB is a global variable that holds the GORM database connection instance.
+var DB *gorm.DB
+
+// InitDB initializes the database connection using GORM and performs schema migrations for the given models.
+func InitDB() {
+	var err error
+	DB, err = gorm.Open(sqlite.Open("void.db"), &gorm.Config{})
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+
+	DB.AutoMigrate(&models.Shout{}, &models.Echo{}, &models.User{}, &models.Notification{})
+}
+
+----
+internal/events/event.go
+package events
+
+// ShoutEvent is an interface representing the data needed for a shout event.
+type ShoutEvent interface {
+	GetShoutID() uint
+	GetContent() string
+	GetUserID() uint
+	GetUsername() string
+}
+
+----
+internal/events/publisher.go
+package events
+
+import (
+	"encoding/json"
+	"log"
+
+	"Void/pkg/rabbitmq"
+)
+
+// PublishShoutEvent publishes a shout event.
+// It depends solely on the ShoutEvent interface.
+func PublishShoutEvent(event ShoutEvent) error {
+	msg, err := json.Marshal(event)
+	if err != nil {
+		log.Printf("Failed to marshal event: %v", err)
+		return err
+	}
+	if err := rabbitmq.PublishNotification(msg); err != nil {
+		log.Printf("Failed to publish event: %v", err)
+		return err
+	}
+	log.Printf("Published shout event for shout ID: %d", event.GetShoutID())
+	return nil
+}
+
+----
+internal/handlers/auth.go
+package handlers
+
+import (
+	"Void/internal/middleware"
+	"Void/pkg/session"
+	"log"
+
+	"github.com/gofiber/fiber/v2"
+	"golang.org/x/crypto/bcrypt"
+
+	"Void/internal/db"
+	"Void/internal/models"
+)
+
+// RegisterAuthRoutes registers all authentication-related routes, including registration, login, and logout handlers.
+func RegisterAuthRoutes(app *fiber.App) {
+	app.Get("/register", middleware.GetUserFromSession, ShowRegister)
+	app.Post("/register", middleware.GetUserFromSession, Register)
+	app.Get("/login", middleware.GetUserFromSession, ShowLogin)
+	app.Post("/login", middleware.GetUserFromSession, Login)
+	app.Get("/logout", middleware.GetUserFromSession, Logout)
+}
+
+// ShowRegister renders the registration page using the "register" template and the "layouts/main" layout.
+func ShowRegister(c *fiber.Ctx) error {
+
+	return c.Render("register", fiber.Map{
+		"UserID": nil,
+	}, "layouts/main")
+}
+
+// Register handles user registration by creating a new user with hashed password and saving it to the database.
+// It validates required input fields (username, email, password) and redirects to the login page upon success.
+// Returns an error or appropriate HTTP response in case of failure or missing fields.
+func Register(c *fiber.Ctx) error {
+	username := c.FormValue("username")
+	email := c.FormValue("email")
+	password := c.FormValue("password")
+
+	if username == "" || email == "" || password == "" {
+		return c.SendString("All fields are required")
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return c.Status(500).SendString("Error processing password")
+	}
+
+	user := models.User{
+		Username: username,
+		Email:    email,
+		Password: string(hashedPassword),
+	}
+	db.DB.Create(&user)
+
+	return c.Redirect("/login")
+}
+
+// ShowLogin renders the login page using the "login" template and the "layouts/main" layout.
+func ShowLogin(c *fiber.Ctx) error {
+	log.Println("Rendering login template")
+	return c.Render("login", fiber.Map{
+		"UserID": nil,
+	}, "layouts/main")
+}
+
+// Login handles user authentication by verifying their email and password and establishes a session upon success.
+// It fetches the user from the database using the provided email and validates the password using bcrypt.
+// On successful authentication, the user's ID is saved in the session, and the user is redirected to the homepage.
+// Returns an error response in case of missing user, invalid credentials, or session handling issues.
+func Login(c *fiber.Ctx) error {
+	log.Println("Login handler reached")
+	email := c.FormValue("email")
+	password := c.FormValue("password")
+
+	var user models.User
+	result := db.DB.Where("email = ?", email).First(&user)
+	if result.Error != nil {
+		return c.SendString("User not found")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return c.SendString("Invalid credentials")
+	}
+
+	// Set the user ID in the session using our session package helper.
+	if err := session.SetUserID(c, user.ID); err != nil {
+		return c.Status(500).SendString("Failed to save session")
+	}
+
+	return c.Redirect("/")
+}
+
+// Logout terminates the user's session and redirects them to the login page. Returns an error on failure.
+func Logout(c *fiber.Ctx) error {
+	if err := session.DestroySession(c); err != nil {
+		return c.Status(500).SendString("Failed to Log out.")
+	}
+	return c.Redirect("/login")
+}
+
+----
+internal/handlers/notifications.go
+package handlers
+
+import (
+	"log"
+
+	"github.com/gofiber/fiber/v2"
+
+	"Void/internal/db"
+	"Void/internal/middleware"
+	"Void/internal/models"
+)
+
+func RegisterNotificationRoutes(app *fiber.App) {
+	// Group this route so that only logged-in users can access it.
+	authGroup := app.Group("/", middleware.GetUserFromSession, middleware.RequireLogin)
+	authGroup.Get("/notifications", middleware.GetUserFromSession, GetNotifications)
+	authGroup.Get("/notifications/:id/read", middleware.GetUserFromSession, MarkNotificationAsRead)
+
+}
+
+// GetNotifications retrieves notifications for the logged-in user and renders them.
+func GetNotifications(c *fiber.Ctx) error {
+	// Get session and the user ID
+	uid := c.Locals("UserID").(uint)
+	if uid != 0 {
+		// Query the notifications for this user, ordered by newest first.
+		var notifications []models.Notification
+		if err := db.DB.
+			Where("user_id = ?", uid).
+			Order("created_at desc").
+			Find(&notifications).Error; err != nil {
+			log.Printf("Error fetching notifications: %v", err)
+			return c.Status(500).SendString("Error fetching notifications")
+		}
+
+		var count int64
+		db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
+		// Render the notifications view.
+		return c.Render("notifications", fiber.Map{
+			"Notifications":     notifications,
+			"UserID":            uid,
+			"NotificationCount": count,
+		}, "layouts/main")
+	}
+
+	return c.Redirect("/login")
+}
+
+// MarkNotificationAsRead marks a specific notification as read for the currently logged-in user.
+// It validates the session, ensures the notification exists, and belongs to the user before updating it.
+// Redirects the user to the notifications page upon success. Returns an error or HTTP status code on failure.
+func MarkNotificationAsRead(c *fiber.Ctx) error {
+	// Retrieve the session and user id.
+	uid := c.Locals("UserID").(uint)
+
+	// Get the notification id from the URL.
+	notifID := c.Params("id")
+	var notif models.Notification
+	if err := db.DB.First(&notif, notifID).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).SendString("Notification not found")
+	}
+
+	// Ensure the notification belongs to the current user.
+	if notif.UserID != uid {
+		return c.Status(fiber.StatusForbidden).SendString("Access denied")
+	}
+
+	// Mark the notification as read.
+	notif.Read = true
+	if err := db.DB.Save(&notif).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString("Failed to mark notification as read")
+	}
+
+	// Redirect back to the notifications page.
+	return c.Redirect("/notifications")
+}
+
+----
+internal/handlers/users.go
+package handlers
+
+import (
+	"Void/internal/db"
+	"Void/internal/middleware"
+	"Void/internal/models"
+	"fmt"
+	"github.com/disintegration/imaging"
+	"github.com/gofiber/fiber/v2"
+	"log"
+	"os"
+)
+
+// RegisterUserRoutes registers user-related routes to the provided fiber app instance.
+func RegisterUserRoutes(app *fiber.App) {
+	app.Get("/users/:username", middleware.GetUserFromSession, GetProfile)
+	app.Get("/profile/edit", middleware.GetUserFromSession, ShowEditProfile)
+	app.Post("/profile/edit", middleware.GetUserFromSession, UpdateProfile)
+}
+
+// GetProfile handles HTTP GET requests to retrieve a user profile based on the provided username parameter.
+func GetProfile(c *fiber.Ctx) error {
+	//get the user and their shouts
+	uid := c.Locals("UserID").(uint)
+	log.Println("Getting profile for user: ", c.Params("username"))
+	username := c.Params("username")
+
+	var user models.User
+	result := db.DB.First(&user, "username = ?", username)
+	if result.Error != nil {
+		return c.SendString("User not found")
+	}
+
+	var shouts []models.Shout
+	if err := db.DB.Where("user_id = ?", user.ID).Order("created_at desc").Find(&shouts).Error; err != nil {
+		log.Printf("Error fetching shouts for user %s: %v", username, err)
+	}
+
+	//render the profile, no authentication should be required.
+	return c.Render("profile", fiber.Map{
+		"User":   user,
+		"UserID": uid,
+		"Shouts": shouts,
+	}, "layouts/main")
+
+}
+
+// ShowEditProfile renders the edit profile form.
+func ShowEditProfile(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	var user models.User
+	if err := db.DB.First(&user, uid).Error; err != nil {
+		return c.SendString("User not found")
+	}
+	return c.Render("edit_profile", fiber.Map{
+		"User": user,
+	}, "layouts/main")
+}
+
+// UpdateProfile processes the form submission to update avatar and bio.
+func UpdateProfile(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+	var user models.User
+	if err := db.DB.First(&user, uid).Error; err != nil {
+		return c.SendString("User not found")
+	}
+
+	// Update bio
+	bio := c.FormValue("bio")
+	user.Bio = bio
+
+	// Process avatar file upload if provided.
+	file, err := c.FormFile("avatar")
+	if err == nil { // file was uploaded
+		// Save the uploaded file temporarily.
+		tempPath := "./tmp/" + file.Filename
+		if err := c.SaveFile(file, tempPath); err != nil {
+			return c.Status(500).SendString("Error saving avatar file")
+		}
+
+		// Open the saved file.
+		srcImage, err := imaging.Open(tempPath)
+		if err != nil {
+			os.Remove(tempPath)
+			return c.Status(500).SendString("Error opening uploaded image")
+		}
+
+		// Resize image to a fixed size (e.g., 200x200 pixels).
+		resizedImage := imaging.Resize(srcImage, 200, 200, imaging.Lanczos)
+
+		// Generate a unique filename.
+		avatarFilename := fmt.Sprintf("%d_%s", uid, file.Filename)
+		avatarPath := "./web/static/uploads/avatars/" + avatarFilename
+
+		// Save the processed image.
+		if err := imaging.Save(resizedImage, avatarPath); err != nil {
+			os.Remove(tempPath)
+			return c.Status(500).SendString("Error saving processed avatar image")
+		}
+
+		// Clean up temporary file.
+		os.Remove(tempPath)
+
+		// Update user's Avatar field.
+		user.Avatar = "/static/uploads/avatars/" + avatarFilename
+	}
+
+	// Save updated user info.
+	if err := db.DB.Save(&user).Error; err != nil {
+		return c.Status(500).SendString("Error updating profile")
+	}
+
+	return c.Redirect("/users/" + user.Username)
+}
+
+----
+internal/handlers/void.go
+package handlers
+
+import (
+	"Void/internal/events"
+	"log"
+
+	"Void/internal/db"
+	"Void/internal/middleware"
+	"Void/internal/models"
+	"github.com/gofiber/fiber/v2"
+)
+
+// RegisterVoidRoutes configures routes for both global and authenticated functionalities for the app.
+func RegisterVoidRoutes(app *fiber.App) {
+	// Register these FIRST - before the auth group
+	app.Get("/echo-chamber", middleware.GetUserFromSession, GetGlobalFeed)
+	app.Get("/global/shout/:id", middleware.GetUserFromSession, GetGlobalShout)
+	app.Post("/global/shout/:id/echo", middleware.GetUserFromSession, CreateGlobalEcho)
+	// Then register the auth group
+	authGroup := app.Group("/", middleware.GetUserFromSession, middleware.RequireLogin)
+	authGroup.Get("/", GetShouts)
+	authGroup.Post("/shout", CreateShout)
+	authGroup.Get("/shout/:id", GetShout)
+	authGroup.Post("/shout/:id/echo", CreateEcho)
+	authGroup.Get("/shout/:id/edit", EditShoutForm)
+	authGroup.Post("/shout/:id/update", UpdateShout)
+	authGroup.Post("/shout/:id/delete", DeleteShout)
+}
+
+// GetShouts retrieves all shouts for the logged-in user.
+func GetShouts(c *fiber.Ctx) error {
+	log.Println("=== GetShouts handler started ===")
+
+	uid := c.Locals("UserID").(uint)
+
+	log.Printf("UserID from session: %v", uid)
+	var shouts []models.Shout
+	result := db.DB.Preload("Echoes").Where("user_id = ?", uid).Find(&shouts)
+	if result.Error != nil {
+		log.Printf("Database error: %v", result.Error)
+		return c.Status(500).SendString("Database error")
+	}
+
+	log.Printf("Found %d shouts for user %d", len(shouts), uid)
+	log.Println("Attempting to render index template")
+
+	var count int64
+	db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
+	return c.Render("index", fiber.Map{
+		"Shouts":            shouts,
+		"UserID":            uid,
+		"NotificationCount": count,
+	}, "layouts/main")
+}
+
+// CreateShout processes a request to create a new shout and persist it in the database, while managing related operations.
+// Retrieves the user ID from the session and validates the input shout content.
+// Saves the new shout to the database and populates its related user data for enriching event publication.
+// Converts the shout into an event payload and publishes the event using the configured messaging mechanism.
+// Redirects the user after successful creation or handles errors appropriately during the process.
+func CreateShout(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	content := c.FormValue("content")
+	if content == "" {
+		return c.Redirect("/")
+	}
+
+	shout := models.Shout{
+		Content: content,
+		UserID:  uid,
+	}
+
+	// Save the shout to the database.
+	if err := db.DB.Create(&shout).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+
+	// Load the associated user (to fill in Username, etc.)
+	if err := db.DB.First(&shout.User, uid).Error; err != nil {
+		log.Printf("Failed to load user: %v", err)
+		// Continue even if this fails.
+	}
+
+	// Convert the shout to its event payload.
+	eventPayload := shout.ToEvent()
+
+	// Publish the event using the interface-based function.
+	if err := events.PublishShoutEvent(eventPayload); err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+
+	return c.Redirect("/")
+}
+
+// GetShout retrieves a single shout.
+func GetShout(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	id := c.Params("id")
+	var shout models.Shout
+	result := db.DB.Preload("Echoes").First(&shout, id)
+	if result.Error != nil {
+		return c.SendStatus(404)
+	}
+	if shout.UserID != uid {
+		return c.Status(403).SendString("Access denied")
+	}
+	var count int64
+	db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
+	return c.Render("shout", fiber.Map{
+		"Shout":             shout,
+		"UserID":            uid,
+		"NotificationCount": count,
+	}, "layouts/main")
+}
+
+// CreateEcho handles the creation of echoes for shouts.
+func CreateEcho(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	id := c.Params("id")
+	var shout models.Shout
+	if err := db.DB.First(&shout, id).Error; err != nil {
+		return c.Status(404).SendString("Shout not found")
+	}
+
+	if shout.UserID != uid {
+		return c.Status(403).SendString("Unauthorized")
+	}
+
+	content := c.FormValue("content")
+	if content == "" {
+		return c.Redirect("/shout/" + id)
+	}
+
+	echo := models.Echo{
+		Content: content,
+		ShoutID: shout.ID,
+	}
+
+	if err := echo.Create(db.DB); err != nil {
+		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+	}
+
+	return c.Redirect("/shout/" + id)
+}
+
+// GetGlobalFeed retrieves all global shouts.
+func GetGlobalFeed(c *fiber.Ctx) error {
+	log.Println("GetGlobalFeed handler started")
+	var shouts []models.Shout
+	result := db.DB.Preload("Echoes").Preload("User").Order("created_at desc").Find(&shouts)
+	if result.Error != nil {
+		log.Printf("Database error: %v", result.Error)
+		return c.Status(500).SendString("Database error")
+	}
+	log.Printf("Found %d global shouts", len(shouts))
+
+	uid := c.Locals("UserID").(uint)
+	if uid == 0 {
+		// If no valid user is found, render with nil UserID
+		return c.Render("echo_chamber", fiber.Map{
+			"Shouts": shouts,
+			"UserID": nil,
+		}, "layouts/main")
+	}
+
+	var count int64
+	db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
+	return c.Render("echo_chamber", fiber.Map{
+		"Shouts":            shouts,
+		"UserID":            uid,
+		"NotificationCount": count,
+	}, "layouts/main")
+}
+
+// GetGlobalShout retrieves a single global shout.
+func GetGlobalShout(c *fiber.Ctx) error {
+	// Try to get the user ID; if there's an error or uid is zero, treat the user as anonymous.
+	uid := c.Locals("UserID").(uint)
+
+	// Get the shout ID from the URL.
+	id := c.Params("id")
+	var shout models.Shout
+	result := db.DB.Preload("Echoes").Preload("User").First(&shout, id)
+	if result.Error != nil {
+		return c.SendStatus(404)
+	}
+
+	// If a valid user is logged in, fetch notification count.
+	if uid != 0 {
+		var count int64
+		db.DB.Model(&models.Notification{}).
+			Where("user_id = ? AND read = ?", uid, false).
+			Count(&count)
+		return c.Render("global_shout", fiber.Map{
+			"Shout":             shout,
+			"UserID":            uid,
+			"NotificationCount": count,
+		}, "layouts/main")
+	}
+
+	// Otherwise, render without user-specific data.
+	return c.Render("global_shout", fiber.Map{
+		"Shout":  shout,
+		"UserID": nil,
+	}, "layouts/main")
+}
+
+// CreateGlobalEcho handles the creation of echoes for global shouts.
+func CreateGlobalEcho(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	if uid == 0 {
+		return c.Redirect("/login")
+	}
+
+	id := c.Params("id")
+	var shout models.Shout
+	result := db.DB.First(&shout, id)
+	if result.Error != nil {
+		return c.SendStatus(404)
+	}
+
+	content := c.FormValue("content")
+	if content == "" {
+		return c.Redirect("/global/shout/" + id)
+	}
+	echo := models.Echo{Content: content, ShoutID: shout.ID}
+	db.DB.Create(&echo)
+	return c.Redirect("/global/shout/" + id)
+}
+
+// EditShoutForm renders the edit form for a given shout.
+func EditShoutForm(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	shoutID := c.Params("id")
+	var shout models.Shout
+	if err := db.DB.First(&shout, shoutID).Error; err != nil {
+		return c.Status(404).SendString("Shout not found")
+	}
+
+	// Ensure that the shout belongs to the logged-in user.
+	if shout.UserID != uid {
+		return c.Status(403).SendString("Unauthorized")
+	}
+
+	var count int64
+	db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
+	return c.Render("edit_shout", fiber.Map{
+		"Shout":             shout,
+		"UserID":            uid,
+		"NotificationCount": count,
+	}, "layouts/main")
+}
+
+// UpdateShout handles the update request.
+func UpdateShout(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	shoutID := c.Params("id")
+	var shout models.Shout
+	if err := db.DB.First(&shout, shoutID).Error; err != nil {
+		return c.Status(404).SendString("Shout not found")
+	}
+
+	if shout.UserID != uid {
+		return c.Status(403).SendString("Unauthorized")
+	}
+
+	newContent := c.FormValue("content")
+	if err := shout.UpdateContent(db.DB, newContent); err != nil {
+		return c.Status(500).SendString(err.Error())
+	}
+
+	return c.Redirect("/shout/" + shoutID)
+}
+
+// DeleteShout handles deleting a shout.
+func DeleteShout(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+
+	shoutID := c.Params("id")
+	var shout models.Shout
+	if err := db.DB.First(&shout, shoutID).Error; err != nil {
+		return c.Status(404).SendString("Shout not found")
+	}
+
+	// Ensure the shout belongs to the logged-in user
+	if shout.UserID != uid {
+		return c.Status(403).SendString("Unauthorized")
+	}
+
+	if err := db.DB.Delete(&shout).Error; err != nil {
+		return c.Status(500).SendString("Failed to delete shout")
+	}
+
+	return c.Redirect("/")
+}
+
+----
+internal/middleware/get_user_from_session.go
+package middleware
+
+import (
+	"Void/pkg/session"
+	"github.com/gofiber/fiber/v2"
+)
+
+func GetUserFromSession(c *fiber.Ctx) error {
+	uid, _ := session.GetUserID(c)
+
+	c.Locals("UserID", uid)
+	return c.Next()
+}
+
+----
+internal/middleware/require_login.go
+package middleware
+
+import (
+	"github.com/gofiber/fiber/v2"
+)
+
+// RequireLogin checks if the user is logged in.
+func RequireLogin(c *fiber.Ctx) error {
+	uid := c.Locals("UserID").(uint)
+	if uid == 0 {
+		return c.Redirect("/login")
+	}
+	return c.Next()
+}
+
+----
+internal/models/echo.go
+package models
+
+import (
+	"errors"
+	"gorm.io/gorm"
+)
+
+// Echo represents a reply (echo) to a shout.
+type Echo struct {
+	gorm.Model
+	Content string `gorm:"not null"`
+	ShoutID uint   `gorm:"not null"`
+}
+
+// Create persists the echo using the provided DB instance.
+// It also performs a simple validation to ensure content is not empty.
+func (e *Echo) Create(db *gorm.DB) error {
+	if e.Content == "" {
+		return errors.New("echo content cannot be empty")
+	}
+	return db.Create(e).Error
+}
+
+----
+internal/models/notification.go
+package models
+
+import "gorm.io/gorm"
+
+// Notification represents a notification for a user.
+type Notification struct {
+	gorm.Model
+	UserID         uint   `gorm:"not null"` // The recipient's ID
+	Message        string `gorm:"not null"` // The plain text message
+	AuthorUsername string // The username of the shout's author
+	ShoutID        uint   // Optional: the ID of the related shout
+	Read           bool   `gorm:"default:false"`
+}
+
+----
+internal/models/shout..go
+package models
+
+import (
+	"encoding/json"
+	"errors"
+	"log"
+
+	"Void/pkg/rabbitmq"
+
+	"gorm.io/gorm"
+)
+
+// Shout represents a post in Void.
+type Shout struct {
+	gorm.Model
+	Content string `gorm:"not null"`
+	UserID  uint   `gorm:"not null"`
+	User    User   // Association to the user.
+	Echoes  []Echo `gorm:"foreignKey:ShoutID"`
+}
+
+// ShoutCreatedEvent is the event payload for when a shout is created.
+// It lives in the models package because it's closely related to the domain.
+type ShoutCreatedEvent struct {
+	ShoutID  uint   `json:"shout_id"`
+	Content  string `json:"content"`
+	UserID   uint   `json:"user_id"`
+	Username string `json:"username"`
+}
+
+// ToEvent converts a Shout to a ShoutCreatedEvent.
+func (s *Shout) ToEvent() ShoutCreatedEvent {
+	return ShoutCreatedEvent{
+		ShoutID:  s.ID,
+		Content:  s.Content,
+		UserID:   s.UserID,
+		Username: s.User.Username,
+	}
+}
+
+// The following methods implement the interface defined in the events package.
+// This way, the events package can depend solely on an interface rather than a concrete type.
+
+// GetShoutID returns the unique identifier of the shout associated with this event.
+func (e ShoutCreatedEvent) GetShoutID() uint {
+	return e.ShoutID
+}
+
+// GetContent retrieves the content of the shout associated with the ShoutCreatedEvent.
+func (e ShoutCreatedEvent) GetContent() string {
+	return e.Content
+}
+
+// GetUserID retrieves the unique identifier of the user associated with the ShoutCreatedEvent.
+func (e ShoutCreatedEvent) GetUserID() uint {
+	return e.UserID
+}
+
+// GetUsername retrieves the username of the user associated with the ShoutCreatedEvent.
+func (e ShoutCreatedEvent) GetUsername() string {
+	return e.Username
+}
+
+// Create persists the shout using the provided DB instance and publishes a notification event.
+func (s *Shout) Create(db *gorm.DB) error {
+	// Save the shout to the database using the injected DB.
+	if err := db.Create(s).Error; err != nil {
+		return err
+	}
+
+	// Load the associated user record so that s.User is populated.
+	if err := db.First(&s.User, s.UserID).Error; err != nil {
+		log.Printf("Failed to load user: %v", err)
+		// Continue even if loading the user fails.
+	}
+
+	// Create an event payload using the shared type.
+	eventPayload := ShoutCreatedEvent{
+		ShoutID:  s.ID,
+		Content:  s.Content,
+		UserID:   s.UserID,
+		Username: s.User.Username,
+	}
+
+	// Marshal the event payload to JSON.
+	msg, err := json.Marshal(eventPayload)
+	if err != nil {
+		log.Printf("Failed to marshal event payload: %v", err)
+		return err
+	}
+
+	// Publish the notification event.
+	if err := rabbitmq.PublishNotification(msg); err != nil {
+		log.Printf("Failed to publish notification: %v", err)
+		return err
+	}
+
+	log.Printf("Published notification for shout ID: %d", s.ID)
+	return nil
+}
+
+// UpdateContent updates the shout's content with some basic validation.
+func (s *Shout) UpdateContent(db *gorm.DB, newContent string) error {
+	if newContent == "" {
+		return errors.New("new content cannot be empty")
+	}
+	s.Content = newContent
+	return db.Save(s).Error
+}
+
+// Delete removes the shout from the database.
+func (s *Shout) Delete(db *gorm.DB) error {
+	return db.Delete(s).Error
+}
+
+----
+internal/models/user.go
+package models
+
+import "gorm.io/gorm"
+
+// User represents a registered user.
+type User struct {
+	gorm.Model
+	Username string `gorm:"unique;not null"`
+	Email    string `gorm:"unique;not null"`
+	Password string `gorm:"not null"`
+	Avatar   string // Path to avatar file
+	Bio      string // Optional user bio
+}
+
+----
+internal/services/notifications/notify.go
+package notifications
+
+import (
+	"log"
+
+	"Void/internal/db"
+	"Void/internal/events"
+	"Void/internal/models"
+)
+
+// SendNewShoutNotifications sends a notification to every user except the shout's author.
+func SendNewShoutNotifications(event events.ShoutEvent) {
+	log.Printf("Creating notifications for shout ID: %d", event.GetShoutID())
+	var recipients []models.User
+
+	if err := db.DB.
+		Where("id != ?", event.GetUserID()).
+		Find(&recipients).Error; err != nil {
+		log.Printf("Error fetching recipients: %v", err)
+		return
+	}
+
+	log.Printf("Found %d recipients", len(recipients))
+
+	for _, user := range recipients {
+		notification := models.Notification{
+			UserID:         user.ID,
+			Message:        truncate(event.GetContent(), 50),
+			AuthorUsername: event.GetUsername(),
+			ShoutID:        event.GetShoutID(),
+		}
+		if err := db.DB.Create(&notification).Error; err != nil {
+			log.Printf("Error creating notification for user %d: %v", user.ID, err)
+		} else {
+			log.Printf("Created notification ID %d for user %d", notification.ID, user.ID)
+		}
+	}
+}
+
+// truncate shortens a string to a specified length and appends "..." if truncation occurs.
+func truncate(s string, n int) string {
+	if len(s) > n {
+		return s[:n] + "..."
+	}
+	return s
+}
+
+
+----
+web/static/style.css
+/* Ultra-Modern Glassy Dark Theme with Dynamic Gradients */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --primary: #6366f1;
+  --primary-hover: #818cf8;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --bg-glass: rgba(17, 25, 40, 0.75);
+  --border-glass: rgba(255, 255, 255, 0.125);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --shadow-glass: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-hover:
+    0 10px 20px -5px rgba(0, 0, 0, 0.2),
+    0 4px 6px -2px rgba(0, 0, 0, 0.1);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(
+    45deg,
+    #0f172a,
+    #312e81,
+    #4c1d95,
+    #831843
+  );
+  background-size: 300% 300%;
+  animation: gradientMove 20s ease infinite;
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.6;
+}
+
+@keyframes gradientMove {
+  0% { background-position: 0% 50% }
+  50% { background-position: 100% 50% }
+  100% { background-position: 0% 50% }
+}
+
+.container {
+  margin: 5rem;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-glass);
+  border-radius: 24px;
+  padding: 2.5rem;
+  width: 90%;
+  max-width: 800px;
+  box-shadow: var(--shadow-glass);
+  transition: all 0.3s ease;
+}
+
+nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.brand {
+  font-size: 2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #6366f1, #818cf8, #c084fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -1px;
+  position: relative;
+}
+
+.brand::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #6366f1, #818cf8);
+  transition: width 0.3s ease;
+}
+
+.brand:hover::after {
+  width: 120%;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.nav-links a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  padding: 0.5rem 1rem;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-links a::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--primary);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+  border-radius: 12px;
+}
+
+.nav-links a:hover {
+  color: var(--text-primary);
+}
+
+.nav-links a:hover::before {
+  opacity: 0.1;
+}
+
+/* Form Elements */
+form textarea, form input {
+  width: 100%;
+  padding: 1rem 1.25rem;
+  margin: 0.75rem 0 1.25rem;
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+  background: rgba(17, 25, 40, 0.3);
+  color: var(--text-primary);
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+form textarea:focus, form input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+button {
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  border: none;
+  padding: 0.875rem 1.75rem;
+  border-radius: 14px;
+  color: white;
+  font-weight: 500;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  margin: 1.25rem 0;
+}
+
+button::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(rgba(255, 255, 255, 0.2), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+}
+
+button:hover::after {
+  opacity: 1;
+}
+
+/* Shout Cards */
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+ul li {
+  background: rgba(17, 25, 40, 0.3);
+  border: 1px solid var(--border-glass);
+  border-radius: 20px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+ul li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(45deg, var(--primary), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+}
+
+ul li:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+}
+
+ul li:hover::before {
+  opacity: 0.05;
+}
+
+.echo {
+  padding-left: 1.25rem;
+  border-left: 3px solid var(--primary);
+  margin: 1.25rem 0;
+  position: relative;
+}
+
+.echo::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 3px;
+  height: 0;
+  background: linear-gradient(var(--primary), var(--primary-hover));
+  transition: height 0.3s ease;
+}
+
+.echo:hover::before {
+  height: 100%;
+}
+
+.timestamp {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.echo-form {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: rgba(17, 25, 40, 0.2);
+  border-radius: 20px;
+  border: 1px solid var(--border-glass);
+  transition: all 0.3s ease;
+}
+
+.echo-form:focus-within {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 2rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.back-link:hover {
+  color: var(--primary);
+  transform: translateX(-4px);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 640px) {
+  .container {
+    padding: 1.5rem;
+    width: 95%;
+  }
+
+  nav {
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .nav-links {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+/* Add this to your existing CSS */
+
+/* General link styling */
+a, a:visited, a:active {
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+/* Shout titles in feeds */
+ul li a {
+  color: var(--text-primary);
+  font-weight: 500;
+  display: inline-block;
+  position: relative;
+}
+
+ul li a::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 2px;
+  bottom: -2px;
+  left: 0;
+  background: linear-gradient(90deg, var(--primary), var(--primary-hover));
+  transition: width 0.3s ease;
+}
+
+ul li a:hover {
+  color: var(--primary);
+}
+
+ul li a:hover::after {
+  width: 100%;
+}
+
+/* Navigation links */
+.back-link, 
+.view-details,
+[href^="/shout"],
+[href^="/global"],
+[href="/echo-chamber"],
+[href="/"],
+[href^="/login"],
+[href^="/register"]{
+  color: var(--text-secondary);
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.back-link:hover, 
+.view-details:hover,
+[href^="/shout"]:hover,
+[href^="/global"]:hover,
+[href="/echo-chamber"]:hover,
+[href="/"]:hover,
+[href^="/login"]:hover,
+[href^="/register"]:hover {
+  color: var(--primary);
+}
+
+/* Override any previous link styling that might conflict */
+.container a,
+.container a:link,
+.container a:visited,
+.container a:hover,
+.container a:active {
+  text-decoration: none;
+}
+
+
+/*align .brand img to the left of the brand text <p>*/
+.brand img {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+
+
+/*align .brand p to the right of the brand img*/
+.brand p {
+  display: inline-block;
+  margin-left: 15px;
+  font-family: "Major Mono Display", monospace;
+  position: relative;
+  top:5px;
+}
+
+h1{
+  font-family: "Exo", sans-serif;
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+h2{
+  font-family: "Exo", sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+
+
+.shout-input{
+  width: 95%;
+}
+
+input.auth{
+  width: 95%;
+}
+
+.edit-form{
+  float: left;
+  margin: 5px;
+}
+
+.clearfix{
+  clear: both;
+}
+/* Container for the user navigation */
+.nav-user {
+  position: relative;
+}
+
+/* User icon button */
+.nav-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+}
+
+button.nav-toggle:hover{
+  /*clear styles*/
+  background: none;
+  border: none;
+  box-shadow: none;
+
+}
+
+/* Style the user icon image */
+.user-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  
+}
+
+/* Notification badge on the icon */
+.badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background-color: var(--danger);
+  color: white;
+  border-radius: 50%;
+  padding: 3px 5px;
+  font-size: 0.75rem;
+  min-width: 10px;
+}
+
+/* Dropdown menu - hidden by default */
+.nav-dropdown {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  box-shadow: var(--shadow-glass);
+  z-index: 100;
+  min-width: 150px;
+}
+
+/* Style the dropdown links */
+.nav-dropdown a {
+  display: block;
+  padding: 12px 16px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+/* Hover effect for dropdown links */
+.nav-dropdown a:hover {
+  background-color: var(--primary-hover);
+  color: var(--text-primary);
+  text-shadow: 0 0 3px var(--shadow-hover);
+}
+
+/* When active, show the dropdown */
+.nav-dropdown.active {
+  display: block;
+}
+
+
+.unauth{
+  margin-left:5px;
+}
+
+/* Style for the notification link to make the whole item clickable */
+.notif-link {
+  text-decoration: none;
+  padding: 5px;
+}
+
+/* Unread notification styling */
+.notification-unread {
+    /*darker tint for unread*/
+    background-color:  rgba(99, 102, 241, 20%);
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 5px;
+}
+
+.avatar {
+  width: 50px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 50%;
+
+}
+
+/* Container for avatar + username on one line */
+.profile-header {
+  display: flex;
+  align-items: center;  /* Vertically center them */
+  gap: 1rem;           /* Space between avatar and text */
+  margin-bottom: 1.5rem;
+}
+
+/* Control the avatar size and shape */
+.profile-header .avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  /* Optional glassy style to match your theme */
+  border: 2px solid var(--border-glass);
+  box-shadow: var(--shadow-glass);
+}
+
+/* Remove default margin so the username aligns nicely */
+.profile-header h1 {
+  margin: 0;
+}
+
+/* Keep or adjust your existing .profile-bio styles to match your dark theme */
+.profile-bio {
+  background: var(--bg-glass);
+  backdrop-filter: blur(15px);
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+  padding: 1rem;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-glass);
+  font-style: italic;
+  margin-bottom: 2rem;
+}
+.profile-card {
+  display: flex;
+  align-items: center;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: var(--shadow-glass);
+  margin-bottom: 2rem;
+}
+
+.profile-card-avatar {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 2px solid var(--border-glass);
+  box-shadow: var(--shadow-glass);
+}
+
+.profile-card-info {
+  margin-left: 1.5rem;
+}
+
+.profile-card-info h1 {
+  margin: 0;
+  font-size: 1.8rem;
+}
+
+.profile-card-bio {
+  margin: 0.5rem 0 0;
+  font-style: italic;
+}
+----
+web/templates/echo_chamber.html
+<h1>Echo Chamber</h1>
+<p>Experience the full spectrum of shouts across the Void.</p>
+<ul>
+    {{ range .Shouts }}
+        <li>
+            <strong>{{ .User.Username }}</strong> shouted: <em>{{ .Content }}</em><br>
+            <small>{{ .CreatedAt | formatDate }}</small><br>
+            <a href="/global/shout/{{ .ID }}">View Details & Echo</a>
+        </li>
+    {{ end }}
+</ul>
+<br>
+<a href="/">Back to Your Feed</a>
+----
+web/templates/edit_profile.html
+<h1>Edit Your Profile</h1>
+<form action="/profile/edit" method="POST" enctype="multipart/form-data">
+    <div>
+        <label for="avatar">Avatar:</label>
+        <br>
+        <img src="{{ .User.Avatar }}" alt="{{ .User.Username }}'s Avatar" class="avatar">
+        <input type="file" name="avatar" id="avatar">
+    </div>
+    <div>
+        <label for="bio">Bio:</label>
+        <textarea name="bio" id="bio" rows="4" cols="50">{{ .User.Bio }}</textarea>
+    </div>
+    <button type="submit">Update Profile</button>
+</form>
+----
+web/templates/edit_shout.html
+<h1>Edit Your Shout</h1>
+  <form  action="/shout/{{ .Shout.ID }}/update" method="POST">
+      <textarea class="shout-input" name="content" required>{{ .Shout.Content }}</textarea>
+      <button class="edit-form" type="submit">Update Shout</button>
+  </form>
+
+  <form  action="/shout/{{ .Shout.ID }}/delete" method="POST" onsubmit="return confirm('Are you sure you want to delete this shout?');">
+      <button class="edit-form" type="submit" style="background: #e74c3c;">Delete Shout</button>
+  </form>
+  <div class="clearfix"></div>
+  <br> 
+
+<a href="/shout/{{ .Shout.ID }}">Cancel</a>
+----
+web/templates/global_shout.html
+<h1>{{ .Shout.Content }}</h1>
+<p>Posted by <strong>{{ .Shout.User.Username }}</strong> on: <small>{{ .Shout.CreatedAt | formatDate }}</small></p>
+<h2>Echoes</h2>
+<ul>
+    {{ range .Shout.Echoes }}
+        <li>
+            {{ .Content }}<br>
+            <small>{{ .CreatedAt | formatDate }}</small>
+        </li>
+    {{ end }}
+</ul>
+<h3>Echo Back</h3>
+<form action="/global/shout/{{ .Shout.ID }}/echo" method="POST">
+    <textarea class="shout-input" name="content" required placeholder="Echo this shout..."></textarea>
+    <button type="submit">Echo</button>
+</form>
+<br>
+<a href="/echo-chamber">Back to Echo Chamber</a>
+----
+web/templates/index.html
+<div>
+    <h1>Your Feed</h1>
+    <form action="/shout" method="POST">
+        <textarea class="shout-input" name="content" required placeholder="Shout into the Void..."></textarea>
+        <button type="submit">Shout</button>
+    </form>
+    <h2>Your Shouts</h2>
+    <ul>
+        {{ range .Shouts }}
+        <li>
+            <a href="/shout/{{ .ID }}">{{ .Content }}</a><br>
+            <small>{{ .CreatedAt | formatDate }}</small>
+        </li>
+        {{ end }}
+    </ul>
+</div>
+----
+web/templates/layouts/main.html
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Void</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Exo:ital,wght@0,100..900;1,100..900&family=Major+Mono+Display&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Major+Mono+Display&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" href="/static/images/logo.png" type="image/x-icon">
+</head>
+
+<body>
+    <div class="container">
+        <nav>
+            <div class="brand">
+                <a href="/"><img src="/static/images/logo.png" height="60px" alt="Void Logo" class="logo"></a>
+                <p><a href="/">Void</a></p>
+            </div>
+            <div class="nav-user">
+                {{ if .UserID }}
+                <button id="navToggle" class="nav-toggle">
+                    <img src="/static/images/user.png" alt="User Icon" class="user-icon">
+                    {{ if .NotificationCount }}
+                    <span class="badge">{{ .NotificationCount }}</span>
+                    {{ end }}
+                </button>
+                <div id="navDropdown" class="nav-dropdown">
+                    <a href="/">Your Feed</a>
+                    <a href="/echo-chamber">Echo Chamber</a>
+                    <a href="/notifications">Notifications</a>
+                    <a href="/profile/edit">Edit Profile</a>
+
+                    <a href="/logout">Logout</a>
+                </div>
+                {{ else }}
+                <a class="unauth" href="/login">Login</a>
+                <a class="unauth" href="/register">Register</a>
+                <a class="unauth" href="/echo-chamber">Echo Chamber</a>
+
+                {{ end }}
+            </div>
+        </nav>
+
+
+        {{embed}}
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var toggle = document.getElementById('navToggle');
+            var dropdown = document.getElementById('navDropdown');
+
+            if (toggle && dropdown) {
+
+                // Toggle dropdown on button click.
+                toggle.addEventListener('click', function (e) {
+                    e.stopPropagation(); // Prevent the click from bubbling up.
+                    dropdown.classList.toggle('active');
+                });
+
+                // Hide the dropdown when clicking outside of it.
+                document.addEventListener('click', function (e) {
+                    if (!dropdown.contains(e.target) && !toggle.contains(e.target)) {
+                        dropdown.classList.remove('active');
+                    }
+
+                });
+            }
+        });
+    </script>
+
+    </script>
+</body>
+
+</html>
+----
+web/templates/login.html
+<h1>Login</h1>
+<form action="/login" method="POST">
+    <input class="auth" type="email" name="email" placeholder="Email" required>
+    <input class="auth" type="password" name="password" placeholder="Password" required>
+    <button type="submit">Login</button>
+</form>
+<a href="/register">Don't have an account? Register</a>
+----
+web/templates/notifications.html
+<h1>Your Notifications</h1>
+{{ if .Notifications }}
+  <ul>
+    {{ range .Notifications }}
+      {{ if not .Read }}
+      <li class="{{ if .Read }}notification-read{{ else }}notification-unread{{ end }}">
+        <a href="/global/shout/{{ .ShoutID }}" class="notif-link">📢 New Shout</a>
+        <a href="/notifications/{{ .ID }}/read">
+          Mark Read
+        </a>
+        <br>
+        <strong>
+          <a href="/users/{{ .AuthorUsername }}" class="username">{{ .AuthorUsername }}</a>
+        </strong>
+        <small>{{ .CreatedAt | formatDate }}</small>
+
+        <br>
+        {{ .Message }}
+      </li>
+      {{ end }}
+    {{ end }}
+  </ul>
+{{ else }}
+  <p>You have no notifications at this time.</p>
+{{ end }}
+
+<br>
+<a href="/">Back to Your Feed</a>
+
+----
+web/templates/profile.html
+<!-- profile.html -->
+<div class="profile-card">
+    {{ if .User.Avatar }}
+    <img
+            src="{{ .User.Avatar }}"
+            alt="{{ .User.Username }}'s Avatar"
+            class="profile-card-avatar"
+    />
+    {{ end }}
+    <div class="profile-card-info">
+        <h1>{{ .User.Username }}</h1>
+        <p class="profile-card-bio">{{ if .User.Bio }}-{{ .User.Bio }}{{ else }}{{ end }}</p>
+    </div>
+
+</div>
+
+
+<h2>Recent Shouts</h2>
+<ul>
+    {{ range .Shouts }}
+    <li>
+        <p>{{ .Content }}</p>
+        <small>{{ .CreatedAt | formatDate }}</small>
+    </li>
+    {{ end }}
+</ul>
+----
+web/templates/register.html
+<h1>Register</h1>
+<form action="/register" method="POST">
+    <input class="auth" type="text" name="username" placeholder="Username" required>
+    <input class="auth" type="email" name="email" placeholder="Email" required>
+    <input class="auth" type="password" name="password" placeholder="Password" required>
+    <button type="submit">Register</button>
+</form>
+<a href="/login">Already have an account? Login</a>
+----
+web/templates/shout.html
+<h1>{{ .Shout.Content }}</h1>
+<p class="timestamp"><small>Posted on: {{ .Shout.CreatedAt }}</small></p>
+{{ if eq .UserID .Shout.UserID }}
+  <a href="/shout/{{ .Shout.ID }}/edit">Edit</a>
+{{ end }}
+<section class="echoes">
+   <h2>Echoes</h2>
+   <ul class="echo-list">
+       {{ range .Shout.Echoes }}
+           <li class="echo">
+               {{ .Content }}<br>
+               <small>{{ .CreatedAt }}</small>
+           </li>
+       {{ end }}
+   </ul>
+</section>
+
+<section class="echo-form">
+   <h3>Echo Back</h3>
+   <form action="/shout/{{ .Shout.ID }}/echo" method="POST">
+       <textarea 
+           name="content" 
+           required 
+           placeholder="Echo this shout..."
+           class="echo-input"
+       ></textarea>
+       <button type="submit" class="echo-button">Echo</button>
+   </form>
+</section>
+<br>
+<a href="/" class="back-link">Back to Your Feed</a>
+--END--

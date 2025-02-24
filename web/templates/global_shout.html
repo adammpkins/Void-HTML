@@ -1,0 +1,18 @@
+<h1>{{ .Shout.Content }}</h1>
+<p>Posted by <strong>{{ .Shout.User.Username }}</strong> on: <small>{{ .Shout.CreatedAt | formatDate }}</small></p>
+<h2>Echoes</h2>
+<ul>
+    {{ range .Shout.Echoes }}
+        <li>
+            {{ .Content }}<br>
+            <small>{{ .CreatedAt | formatDate }}</small>
+        </li>
+    {{ end }}
+</ul>
+<h3>Echo Back</h3>
+<form action="/global/shout/{{ .Shout.ID }}/echo" method="POST">
+    <textarea class="shout-input" name="content" required placeholder="Echo this shout..."></textarea>
+    <button type="submit">Echo</button>
+</form>
+<br>
+<a href="/echo-chamber">Back to Echo Chamber</a>

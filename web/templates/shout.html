@@ -1,0 +1,31 @@
+<h1>{{ .Shout.Content }}</h1>
+<p class="timestamp"><small>Posted on: {{ .Shout.CreatedAt }}</small></p>
+{{ if eq .UserID .Shout.UserID }}
+  <a href="/shout/{{ .Shout.ID }}/edit">Edit</a>
+{{ end }}
+<section class="echoes">
+   <h2>Echoes</h2>
+   <ul class="echo-list">
+       {{ range .Shout.Echoes }}
+           <li class="echo">
+               {{ .Content }}<br>
+               <small>{{ .CreatedAt }}</small>
+           </li>
+       {{ end }}
+   </ul>
+</section>
+
+<section class="echo-form">
+   <h3>Echo Back</h3>
+   <form action="/shout/{{ .Shout.ID }}/echo" method="POST">
+       <textarea 
+           name="content" 
+           required 
+           placeholder="Echo this shout..."
+           class="echo-input"
+       ></textarea>
+       <button type="submit" class="echo-button">Echo</button>
+   </form>
+</section>
+<br>
+<a href="/" class="back-link">Back to Your Feed</a>

@@ -1,0 +1,22 @@
+# .air.toml
+
+# Root directory of your project.
+root = "."
+
+# Directory to put the temporary build output.
+tmp_dir = "tmp"
+
+[build]
+# The command to build your Go application.
+cmd = "go build -o ./tmp/main ./cmd/server"
+# The resulting binary that air will run.
+bin = "./tmp/main"
+# File extensions to watch for changes.
+include_ext = ["go", "html", "tmpl", "tpl", "css", "js"]
+# Directories to exclude from watching.
+exclude_dir = ["vendor", "tmp"]
+# Files to exclude from watching.
+exclude_file = ["air.conf", "air.toml"]
+
+[log]
+timestamp = true

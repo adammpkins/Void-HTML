@@ -1,0 +1,13 @@
+<h1>Echo Chamber</h1>
+<p>Experience the full spectrum of shouts across the Void.</p>
+<ul>
+    {{ range .Shouts }}
+        <li>
+            <strong>{{ .User.Username }}</strong> shouted: <em>{{ .Content }}</em><br>
+            <small>{{ .CreatedAt | formatDate }}</small><br>
+            <a href="/global/shout/{{ .ID }}">View Details & Echo</a>
+        </li>
+    {{ end }}
+</ul>
+<br>
+<a href="/">Back to Your Feed</a>

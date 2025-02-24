@@ -1,0 +1,598 @@
+/* Ultra-Modern Glassy Dark Theme with Dynamic Gradients */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --primary: #6366f1;
+  --primary-hover: #818cf8;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --bg-glass: rgba(17, 25, 40, 0.75);
+  --border-glass: rgba(255, 255, 255, 0.125);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --shadow-glass: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-hover:
+    0 10px 20px -5px rgba(0, 0, 0, 0.2),
+    0 4px 6px -2px rgba(0, 0, 0, 0.1);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(
+    45deg,
+    #0f172a,
+    #312e81,
+    #4c1d95,
+    #831843
+  );
+  background-size: 300% 300%;
+  animation: gradientMove 20s ease infinite;
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.6;
+}
+
+@keyframes gradientMove {
+  0% { background-position: 0% 50% }
+  50% { background-position: 100% 50% }
+  100% { background-position: 0% 50% }
+}
+
+.container {
+  margin: 5rem;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-glass);
+  border-radius: 24px;
+  padding: 2.5rem;
+  width: 90%;
+  max-width: 800px;
+  box-shadow: var(--shadow-glass);
+  transition: all 0.3s ease;
+}
+
+nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.brand {
+  font-size: 2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #6366f1, #818cf8, #c084fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -1px;
+  position: relative;
+}
+
+.brand::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #6366f1, #818cf8);
+  transition: width 0.3s ease;
+}
+
+.brand:hover::after {
+  width: 120%;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.nav-links a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  padding: 0.5rem 1rem;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-links a::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--primary);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+  border-radius: 12px;
+}
+
+.nav-links a:hover {
+  color: var(--text-primary);
+}
+
+.nav-links a:hover::before {
+  opacity: 0.1;
+}
+
+/* Form Elements */
+form textarea, form input {
+  width: 100%;
+  padding: 1rem 1.25rem;
+  margin: 0.75rem 0 1.25rem;
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+  background: rgba(17, 25, 40, 0.3);
+  color: var(--text-primary);
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+form textarea:focus, form input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+button {
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  border: none;
+  padding: 0.875rem 1.75rem;
+  border-radius: 14px;
+  color: white;
+  font-weight: 500;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  margin: 1.25rem 0;
+}
+
+button::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(rgba(255, 255, 255, 0.2), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+}
+
+button:hover::after {
+  opacity: 1;
+}
+
+/* Shout Cards */
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+ul li {
+  background: rgba(17, 25, 40, 0.3);
+  border: 1px solid var(--border-glass);
+  border-radius: 20px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+ul li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(45deg, var(--primary), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+}
+
+ul li:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
+}
+
+ul li:hover::before {
+  opacity: 0.05;
+}
+
+.echo {
+  padding-left: 1.25rem;
+  border-left: 3px solid var(--primary);
+  margin: 1.25rem 0;
+  position: relative;
+}
+
+.echo::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 3px;
+  height: 0;
+  background: linear-gradient(var(--primary), var(--primary-hover));
+  transition: height 0.3s ease;
+}
+
+.echo:hover::before {
+  height: 100%;
+}
+
+.timestamp {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.echo-form {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: rgba(17, 25, 40, 0.2);
+  border-radius: 20px;
+  border: 1px solid var(--border-glass);
+  transition: all 0.3s ease;
+}
+
+.echo-form:focus-within {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 2rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.back-link:hover {
+  color: var(--primary);
+  transform: translateX(-4px);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 640px) {
+  .container {
+    padding: 1.5rem;
+    width: 95%;
+  }
+
+  nav {
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .nav-links {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+/* Add this to your existing CSS */
+
+/* General link styling */
+a, a:visited, a:active {
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+/* Shout titles in feeds */
+ul li a {
+  color: var(--text-primary);
+  font-weight: 500;
+  display: inline-block;
+  position: relative;
+}
+
+ul li a::after {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 2px;
+  bottom: -2px;
+  left: 0;
+  background: linear-gradient(90deg, var(--primary), var(--primary-hover));
+  transition: width 0.3s ease;
+}
+
+ul li a:hover {
+  color: var(--primary);
+}
+
+ul li a:hover::after {
+  width: 100%;
+}
+
+/* Navigation links */
+.back-link, 
+.view-details,
+[href^="/shout"],
+[href^="/global"],
+[href="/echo-chamber"],
+[href="/"],
+[href^="/login"],
+[href^="/register"]{
+  color: var(--text-secondary);
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.back-link:hover, 
+.view-details:hover,
+[href^="/shout"]:hover,
+[href^="/global"]:hover,
+[href="/echo-chamber"]:hover,
+[href="/"]:hover,
+[href^="/login"]:hover,
+[href^="/register"]:hover {
+  color: var(--primary);
+}
+
+/* Override any previous link styling that might conflict */
+.container a,
+.container a:link,
+.container a:visited,
+.container a:hover,
+.container a:active {
+  text-decoration: none;
+}
+
+
+/*align .brand img to the left of the brand text <p>*/
+.brand img {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+
+
+/*align .brand p to the right of the brand img*/
+.brand p {
+  display: inline-block;
+  margin-left: 15px;
+  font-family: "Major Mono Display", monospace;
+  position: relative;
+  top:5px;
+}
+
+h1{
+  font-family: "Exo", sans-serif;
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+h2{
+  font-family: "Exo", sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+
+
+.shout-input{
+  width: 95%;
+}
+
+input.auth{
+  width: 95%;
+}
+
+.edit-form{
+  float: left;
+  margin: 5px;
+}
+
+.clearfix{
+  clear: both;
+}
+/* Container for the user navigation */
+.nav-user {
+  position: relative;
+}
+
+/* User icon button */
+.nav-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+}
+
+button.nav-toggle:hover{
+  /*clear styles*/
+  background: none;
+  border: none;
+  box-shadow: none;
+
+}
+
+/* Style the user icon image */
+.user-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  
+}
+
+/* Notification badge on the icon */
+.badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background-color: var(--danger);
+  color: white;
+  border-radius: 50%;
+  padding: 3px 5px;
+  font-size: 0.75rem;
+  min-width: 10px;
+}
+
+/* Dropdown menu - hidden by default */
+.nav-dropdown {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  box-shadow: var(--shadow-glass);
+  z-index: 100;
+  min-width: 150px;
+}
+
+/* Style the dropdown links */
+.nav-dropdown a {
+  display: block;
+  padding: 12px 16px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+/* Hover effect for dropdown links */
+.nav-dropdown a:hover {
+  background-color: var(--primary-hover);
+  color: var(--text-primary);
+  text-shadow: 0 0 3px var(--shadow-hover);
+}
+
+/* When active, show the dropdown */
+.nav-dropdown.active {
+  display: block;
+}
+
+
+.unauth{
+  margin-left:5px;
+}
+
+/* Style for the notification link to make the whole item clickable */
+.notif-link {
+  text-decoration: none;
+  padding: 5px;
+}
+
+/* Unread notification styling */
+.notification-unread {
+    /*darker tint for unread*/
+    background-color:  rgba(99, 102, 241, 20%);
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 5px;
+}
+
+.avatar {
+  width: 50px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 50%;
+
+}
+
+/* Container for avatar + username on one line */
+.profile-header {
+  display: flex;
+  align-items: center;  /* Vertically center them */
+  gap: 1rem;           /* Space between avatar and text */
+  margin-bottom: 1.5rem;
+}
+
+/* Control the avatar size and shape */
+.profile-header .avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  /* Optional glassy style to match your theme */
+  border: 2px solid var(--border-glass);
+  box-shadow: var(--shadow-glass);
+}
+
+/* Remove default margin so the username aligns nicely */
+.profile-header h1 {
+  margin: 0;
+}
+
+/* Keep or adjust your existing .profile-bio styles to match your dark theme */
+.profile-bio {
+  background: var(--bg-glass);
+  backdrop-filter: blur(15px);
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+  padding: 1rem;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-glass);
+  font-style: italic;
+  margin-bottom: 2rem;
+}
+.profile-card {
+  display: flex;
+  align-items: center;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: var(--shadow-glass);
+  margin-bottom: 2rem;
+}
+
+.profile-card-avatar {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 2px solid var(--border-glass);
+  box-shadow: var(--shadow-glass);
+}
+
+.profile-card-info {
+  margin-left: 1.5rem;
+}
+
+.profile-card-info h1 {
+  margin: 0;
+  font-size: 1.8rem;
+}
+
+.profile-card-bio {
+  margin: 0.5rem 0 0;
+  font-style: italic;
+}

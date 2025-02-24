@@ -1,0 +1,16 @@
+<div>
+    <h1>Your Feed</h1>
+    <form action="/shout" method="POST">
+        <textarea class="shout-input" name="content" required placeholder="Shout into the Void..."></textarea>
+        <button type="submit">Shout</button>
+    </form>
+    <h2>Your Shouts</h2>
+    <ul>
+        {{ range .Shouts }}
+        <li>
+            <a href="/shout/{{ .ID }}">{{ .Content }}</a><br>
+            <small>{{ .CreatedAt | formatDate }}</small>
+        </li>
+        {{ end }}
+    </ul>
+</div>

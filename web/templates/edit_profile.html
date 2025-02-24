@@ -1,0 +1,14 @@
+<h1>Edit Your Profile</h1>
+<form action="/profile/edit" method="POST" enctype="multipart/form-data">
+    <div>
+        <label for="avatar">Avatar:</label>
+        <br>
+        <img src="{{ .User.Avatar }}" alt="{{ .User.Username }}'s Avatar" class="avatar">
+        <input type="file" name="avatar" id="avatar">
+    </div>
+    <div>
+        <label for="bio">Bio:</label>
+        <textarea name="bio" id="bio" rows="4" cols="50">{{ .User.Bio }}</textarea>
+    </div>
+    <button type="submit">Update Profile</button>
+</form>

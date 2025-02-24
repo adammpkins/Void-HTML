@@ -1,0 +1,13 @@
+<h1>Edit Your Shout</h1>
+  <form  action="/shout/{{ .Shout.ID }}/update" method="POST">
+      <textarea class="shout-input" name="content" required>{{ .Shout.Content }}</textarea>
+      <button class="edit-form" type="submit">Update Shout</button>
+  </form>
+
+  <form  action="/shout/{{ .Shout.ID }}/delete" method="POST" onsubmit="return confirm('Are you sure you want to delete this shout?');">
+      <button class="edit-form" type="submit" style="background: #e74c3c;">Delete Shout</button>
+  </form>
+  <div class="clearfix"></div>
+  <br> 
+
+<a href="/shout/{{ .Shout.ID }}">Cancel</a>
