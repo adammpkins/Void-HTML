@@ -4,29 +4,6 @@
 
 This repository is the HTML version of the Void platform. A separate repository (e.g., Void-Inertia or Void-Vue) is planned for a more dynamic, client-driven front-end using Inertia/Vue.
 
----
-
-## 📖 Table of Contents
-
-- [📌 Overview](#overview)
-- [✨ Key Features](#key-features)
-- [🏗 Architecture & Design](#architecture--design)
-- [🛠 Technologies Used](#technologies-used)
-- [🚀 Getting Started](#getting-started)
-  - [⚙ Prerequisites](#prerequisites)
-  - [📥 Installation](#installation)
-  - [⚙ Configuration](#configuration)
-  - [▶ Running the Application](#running-the-application)
-- [📂 Project Structure](#project-structure)
-- [🛡 Middleware & Session Management](#middleware--session-management)
-- [📢 Notifications & Event-Driven Architecture](#notifications--event-driven-architecture)
-- [🛠 Development Workflow](#development-workflow)
-- [🤝 Contributing](#contributing)
-- [📜 License](#license)
-- [ℹ️ Additional Notes](#additional-notes)
-
----
-
 ## 📌 Overview
 
 Void-HTML is designed to be a minimalistic yet fully functional microblogging platform. Its primary focus is to:
