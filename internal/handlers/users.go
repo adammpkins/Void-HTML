@@ -54,7 +54,8 @@ func ShowEditProfile(c *fiber.Ctx) error {
 		return c.SendString("User not found")
 	}
 	return c.Render("edit_profile", fiber.Map{
-		"User": user,
+		"User":   user,
+		"UserID": uid,
 	}, "layouts/main")
 }
 
@@ -83,9 +84,9 @@ func UpdateProfile(c *fiber.Ctx) error {
 		srcImage, err := imaging.Open(tempPath)
 		if err != nil {
 			os.Remove(tempPath)
+			log.Printf("imaging.Open error: %v", err)
 			return c.Status(500).SendString("Error opening uploaded image")
 		}
-
 		// Resize image to a fixed size (e.g., 200x200 pixels).
 		resizedImage := imaging.Resize(srcImage, 200, 200, imaging.Lanczos)
 
