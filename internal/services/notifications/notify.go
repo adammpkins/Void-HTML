@@ -9,6 +9,7 @@ import (
 )
 
 // SendNewShoutNotifications sends a notification to every user except the shout's author.
+// internal/services/notifications/notify.go
 func SendNewShoutNotifications(event events.ShoutEvent) {
 	log.Printf("Creating notifications for shout ID: %d", event.GetShoutID())
 	var recipients []models.User
@@ -27,6 +28,7 @@ func SendNewShoutNotifications(event events.ShoutEvent) {
 			UserID:         user.ID,
 			Message:        truncate(event.GetContent(), 50),
 			AuthorUsername: event.GetUsername(),
+			AuthorAvatar:   event.(interface{ GetAvatar() string }).GetAvatar(), // type assertion if needed
 			ShoutID:        event.GetShoutID(),
 		}
 		if err := db.DB.Create(&notification).Error; err != nil {

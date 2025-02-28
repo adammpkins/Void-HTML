@@ -1,12 +1,26 @@
+
 <h1>Echo Chamber</h1>
 <p>Experience the full spectrum of shouts across the Void.</p>
 <ul>
+    {{ if .Shouts }}
     {{ range .Shouts }}
-        <li>
-            <strong>{{ .User.Username }}</strong> shouted: <em>{{ .Content }}</em><br>
-            <small>{{ .CreatedAt | formatDate }}</small><br>
-            <a href="/global/shout/{{ .ID }}">View Details & Echo</a>
-        </li>
+    <li>
+        <div class="shout-header">
+            <img src="{{ .User.Avatar }}" alt="{{ .User.Username }}'s avatar" class="avatar">
+            <div class="shout-meta">
+                <a href="/users/{{ .User.Username }}">{{ .User.Username }}</a>
+                <small>{{ .CreatedAt | formatDate }}</small>
+            </div>
+        </div>
+        <div class="shout-content">
+            <a href="/global/shout/{{ .ID }}">
+                {{ .Content }}
+            </a>
+        </div>
+    </li>
+    {{ end }}
+    {{ else }}
+    <li>No shouts yet. Why not make one?</li>
     {{ end }}
 </ul>
 <br>

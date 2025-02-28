@@ -26,6 +26,8 @@ type ShoutCreatedEvent struct {
 	Content  string `json:"content"`
 	UserID   uint   `json:"user_id"`
 	Username string `json:"username"`
+	Avatar   string `json:"avatar"` // New field
+
 }
 
 // ToEvent converts a Shout to a ShoutCreatedEvent.
@@ -35,6 +37,7 @@ func (s *Shout) ToEvent() ShoutCreatedEvent {
 		Content:  s.Content,
 		UserID:   s.UserID,
 		Username: s.User.Username,
+		Avatar:   s.User.Avatar, // Make sure the User is preloaded!
 	}
 }
 
@@ -59,6 +62,10 @@ func (e ShoutCreatedEvent) GetUserID() uint {
 // GetUsername retrieves the username of the user associated with the ShoutCreatedEvent.
 func (e ShoutCreatedEvent) GetUsername() string {
 	return e.Username
+}
+
+func (e ShoutCreatedEvent) GetAvatar() string {
+	return e.Avatar
 }
 
 // Create persists the shout using the provided DB instance and publishes a notification event.

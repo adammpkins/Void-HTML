@@ -1,28 +1,32 @@
 <h1>Your Notifications</h1>
-{{ if .Notifications }}
-  <ul>
+<ul>
+    {{ if gt .NotificationCount 0 }}
     {{ range .Notifications }}
-      {{ if not .Read }}
-      <li class="{{ if .Read }}notification-read{{ else }}notification-unread{{ end }}">
-        <a href="/global/shout/{{ .ShoutID }}" class="notif-link">📢 New Shout</a>
-        <a href="/notifications/{{ .ID }}/read">
-          Mark Read
-        </a>
-        <br>
-        <strong>
-          <a href="/users/{{ .AuthorUsername }}" class="username">{{ .AuthorUsername }}</a>
-        </strong>
-        <small>{{ .CreatedAt | formatDate }}</small>
-
-        <br>
-        {{ .Message }}
-      </li>
-      {{ end }}
+    {{ if not .Read }}
+    <li>
+        <div class="shout-header">
+            <img src="{{ .AuthorAvatar }}" alt="{{ .AuthorUsername }}'s avatar" class="avatar">
+            <div class="shout-meta">
+                <a href="/users/{{ .AuthorUsername }}">{{ .AuthorUsername }}</a>
+                <small>{{ .CreatedAt | formatDate }}</small>
+            </div>
+        </div>
+        <div class="shout-content">
+            <a href="/global/shout/{{ .ShoutID }}" class="notif-link">📢 New Shout</a>
+            <a href="/notifications/{{ .ID }}/read">
+                Mark Read
+            </a>
+            <br><br>
+            {{ .Message }}
+        </div>
+    </li>
     {{ end }}
-  </ul>
-{{ else }}
-  <p>You have no notifications at this time.</p>
-{{ end }}
-
+    {{ end }}
+    {{ else }}
+    <li>
+        <p>You have no notifications at this time.</p>
+    </li>
+    {{ end }}
+</ul>
 <br>
 <a href="/">Back to Your Feed</a>

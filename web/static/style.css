@@ -505,19 +505,19 @@ button.nav-toggle:hover{
 }
 
 /* Style for the notification link to make the whole item clickable */
-.notif-link {
-  text-decoration: none;
-  padding: 5px;
-}
+/*.notif-link {*/
+/*  text-decoration: none;*/
+/*  padding: 5px;*/
+/*}*/
 
 /* Unread notification styling */
-.notification-unread {
-    /*darker tint for unread*/
-    background-color:  rgba(99, 102, 241, 20%);
-    padding: 20px;
-    border-radius: 10px;
-    margin-bottom: 5px;
-}
+/*.notification-unread {*/
+/*    !*darker tint for unread*!*/
+/*    background-color:  rgba(99, 102, 241, 20%);*/
+/*    padding: 20px;*/
+/*    border-radius: 10px;*/
+/*    margin-bottom: 5px;*/
+/*}*/
 
 .avatar {
   width: 50px;
@@ -595,4 +595,38 @@ button.nav-toggle:hover{
 .profile-card-bio {
   margin: 0.5rem 0 0;
   font-style: italic;
+}
+
+.divider {
+  border-bottom: 1px solid var(--border-glass);
+  margin-bottom: 1rem;
+}
+
+.shout-header {
+  display: flex;
+  align-items: center; /* vertically centers the avatar with the text */
+  margin-bottom: 8px;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 10px;
+}
+
+.shout-meta a {
+  font-weight: bold;
+  margin: 0;
+  padding: 0;
+  line-height: 1.2;
+}
+
+.shout-meta small {
+  color: #666;
+  font-size: 0.8em;
+  line-height: 1.2;
+  display: block;
+  margin-top: 2px;
 }

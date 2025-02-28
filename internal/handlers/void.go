@@ -32,10 +32,16 @@ func GetShouts(c *fiber.Ctx) error {
 	log.Println("=== GetShouts handler started ===")
 
 	uid := c.Locals("UserID").(uint)
+	var user models.User
+	if err := db.DB.First(&user, uid).Error; err != nil {
+		return c.Status(404).SendString("User not found")
+	}
+
+	log.Printf("User from session: %v", user)
 
 	log.Printf("UserID from session: %v", uid)
 	var shouts []models.Shout
-	result := db.DB.Preload("Echoes").Where("user_id = ?", uid).Find(&shouts)
+	result := db.DB.Preload("Echoes").Preload("User").Where("user_id = ?", uid).Find(&shouts)
 	if result.Error != nil {
 		log.Printf("Database error: %v", result.Error)
 		return c.Status(500).SendString("Database error")
@@ -46,10 +52,10 @@ func GetShouts(c *fiber.Ctx) error {
 
 	var count int64
 	db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
-
 	return c.Render("index", fiber.Map{
 		"Shouts":            shouts,
 		"UserID":            uid,
+		"User":              user,
 		"NotificationCount": count,
 	}, "layouts/main")
 }

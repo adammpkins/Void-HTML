@@ -1,5 +1,5 @@
-<h1>{{ .Shout.Content }}</h1>
-<p class="timestamp"><small>Posted on: {{ .Shout.CreatedAt }}</small></p>
+<p>{{ .Shout.Content }}</p>
+<p class="timestamp"><small>Posted on: {{ .Shout.CreatedAt | formatDate }}</small></p>
 {{ if eq .UserID .Shout.UserID }}
   <a href="/shout/{{ .Shout.ID }}/edit">Edit</a>
 {{ end }}
@@ -9,7 +9,7 @@
        {{ range .Shout.Echoes }}
            <li class="echo">
                {{ .Content }}<br>
-               <small>{{ .CreatedAt }}</small>
+               <small>{{ .CreatedAt | formatDate}}</small>
            </li>
        {{ end }}
    </ul>

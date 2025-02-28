@@ -6,11 +6,25 @@
     </form>
     <h2>Your Shouts</h2>
     <ul>
+        {{ if .Shouts }}
         {{ range .Shouts }}
         <li>
-            <a href="/shout/{{ .ID }}">{{ .Content }}</a><br>
-            <small>{{ .CreatedAt | formatDate }}</small>
+            <div class="shout-header">
+                <img src="{{ .User.Avatar }}" alt="{{ .User.Username }}'s avatar" class="avatar">
+                <div class="shout-meta">
+                    <a href="/users/{{ .User.Username }}">{{ .User.Username }}</a>
+                    <small>{{ .CreatedAt | formatDate }}</small>
+                </div>
+            </div>
+            <div class="shout-content">
+                <a href="/shout/{{ .ID }}">
+                    {{ .Content }}
+                </a>
+            </div>
         </li>
+        {{ end }}
+        {{ else }}
+        <li>No shouts yet. Why not make one?</li>
         {{ end }}
     </ul>
 </div>

@@ -36,11 +36,15 @@ func GetProfile(c *fiber.Ctx) error {
 		log.Printf("Error fetching shouts for user %s: %v", username, err)
 	}
 
+	var count int64
+	db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
 	//render the profile, no authentication should be required.
 	return c.Render("profile", fiber.Map{
-		"User":   user,
-		"UserID": uid,
-		"Shouts": shouts,
+		"User":              user,
+		"UserID":            uid,
+		"Shouts":            shouts,
+		"NotificationCount": count,
 	}, "layouts/main")
 
 }
@@ -53,9 +57,14 @@ func ShowEditProfile(c *fiber.Ctx) error {
 	if err := db.DB.First(&user, uid).Error; err != nil {
 		return c.SendString("User not found")
 	}
+
+	var count int64
+	db.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", uid, false).Count(&count)
+
 	return c.Render("edit_profile", fiber.Map{
-		"User":   user,
-		"UserID": uid,
+		"User":              user,
+		"UserID":            uid,
+		"NotificationCount": count,
 	}, "layouts/main")
 }
 
